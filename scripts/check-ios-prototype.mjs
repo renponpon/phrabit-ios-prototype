@@ -80,9 +80,27 @@ const checks = [
     assert.match(workflow, /if: \$\{\{ inputs\.confirm_usage \}\}/);
     assert.match(workflow, /timeout-minutes: 20/);
     assert.match(workflow, /CODE_SIGNING_ALLOWED=NO/);
+    assert.match(workflow, /runs-on: macos-26/);
+    assert.match(workflow, /DEVELOPER_DIR: \/Applications\/Xcode_26\.2\.app\/Contents\/Developer/);
+    assert.match(workflow, /Verify distribution-compatible toolchain/);
+    assert.match(workflow, /Verify bundled privacy manifests/);
     assert.doesNotMatch(workflow, /^\s+(push|pull_request|schedule):/m);
     assert.doesNotMatch(workflow, /secrets\.|upload_to_testflight|app-store-connect|vercel|curl|\.env/);
     assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
+  }],
+  ["offline prototype privacy declarations match the native APIs", () => {
+    const applicationPrivacy = read("App/PrivacyInfo.xcprivacy");
+    const controlPrivacy = read("Control/PrivacyInfo.xcprivacy");
+    for (const manifest of [applicationPrivacy, controlPrivacy]) {
+      assert.match(manifest, /<key>NSPrivacyTracking<\/key>\s*<false\/>/);
+      assert.match(manifest, /<key>NSPrivacyCollectedDataTypes<\/key>\s*<array\/>/);
+      assert.match(manifest, /NSPrivacyAccessedAPICategoryUserDefaults/);
+      assert.match(manifest, /CA92\.1/);
+    }
+    assert.match(applicationPrivacy, /NSPrivacyAccessedAPICategorySystemBootTime/);
+    assert.match(applicationPrivacy, /35F9\.1/);
+    assert.match(applicationPrivacy, /NSPrivacyAccessedAPICategoryFileTimestamp/);
+    assert.match(applicationPrivacy, /C617\.1/);
   }]
 ];
 
@@ -90,5 +108,5 @@ for (const [name, check] of checks) {
   check();
   process.stdout.write(`PASS ${name}\n`);
 }
-process.stdout.write("7 static configuration checks passed. Swift compilation, XCTest, microphone, and lock-screen behavior are NOT verified by this script.\n");
+process.stdout.write(`${checks.length} static configuration checks passed. Swift compilation, XCTest, microphone, and lock-screen behavior are NOT verified by this script.\n`);
 

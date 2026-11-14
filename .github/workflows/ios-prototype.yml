@@ -19,15 +19,23 @@ concurrency:
 jobs:
   build:
     if: ${{ inputs.confirm_usage }}
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
+      - name: Verify distribution-compatible toolchain
+        run: |
+          xcodeVersion="$(xcodebuild -version | head -n 1)"
+          iosSdkVersion="$(xcrun --sdk iphoneos --show-sdk-version)"
+          printf '%s\niOS SDK %s\n' "$xcodeVersion" "$iosSdkVersion"
+          node -e 'const [xcode, sdk] = process.argv.slice(1); if (Number(xcode.replace("Xcode ", "").split(".")[0]) < 26 || Number(sdk.split(".")[0]) < 26) throw new Error("Xcode 26+ and iOS SDK 26+ are required for distribution preparation");' "$xcodeVersion" "$iosSdkVersion"
       - name: Validate prototype safety boundaries
         run: node scripts/check-ios-prototype.mjs
       - name: Test native core
@@ -55,4 +63,13 @@ jobs:
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee build/simulator-build.log
+      - name: Verify bundled privacy manifests
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          appPath=build/DerivedData/Build/Products/Debug-iphonesimulator/PhrabitCapture.app
+          controlPath="$appPath/PlugIns/PhrabitCaptureControl.appex"
+          test -f "$appPath/PrivacyInfo.xcprivacy"
+          test -f "$controlPath/PrivacyInfo.xcprivacy"
+          plutil -lint "$appPath/PrivacyInfo.xcprivacy" "$controlPath/PrivacyInfo.xcprivacy"
+          plutil -extract DTSDKName raw -o - "$appPath/Info.plist"
 

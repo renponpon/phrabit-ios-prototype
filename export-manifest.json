@@ -9,8 +9,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/README.md",
-      "bytes": 9499,
-      "sha256": "ca72d7eb2fc5892a5dbe1a752251fa2d6d25181f7d4fb08463be2533f29aa78b"
+      "bytes": 12663,
+      "sha256": "2a3ff55c039d0831b7e23234c6c8d01cbd766c130764d50ccbee6edd5858b0fc"
     },
     {
       "path": "native/ios/PhrabitCapture/project.yml",
@@ -53,9 +53,19 @@
       "sha256": "5692e39f2ac590d3aac00f10697f4e29e52ca00e704cef00b24f26ec7e5ae40f"
     },
     {
+      "path": "native/ios/PhrabitCapture/App/PrivacyInfo.xcprivacy",
+      "bytes": 1124,
+      "sha256": "cfbaf24256f64635000a2e16a0ea93d3afa2199e62dbf7d1e23d08ffb0774977"
+    },
+    {
       "path": "native/ios/PhrabitCapture/Control/PhrabitCaptureControl.swift",
       "bytes": 799,
       "sha256": "5f85337b3fabcb4374b516b4736aac265d7ac847009ff997394ae511adb7494d"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Control/PrivacyInfo.xcprivacy",
+      "bytes": 611,
+      "sha256": "03980c92d18cd035a3351a53417b421797fe08b4ee3b81925d3e1e5411295e2f"
     },
     {
       "path": "native/ios/PhrabitCapture/Core/Package.swift",
@@ -104,18 +114,18 @@
     },
     {
       "path": ".github/workflows/ios-prototype.yml",
-      "bytes": 1744,
-      "sha256": "8a4cec176cbdcf6886b9f6cb9af9abbd21a10840ce3be125fa9bae8d9bc58c4f"
+      "bytes": 2911,
+      "sha256": "8b77d38ec0687696d55c501dbbac553a4096eac5b9d908708438ce8a5ec98798"
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 5303,
-      "sha256": "a499759b3c63930575038cfe1f13080c2830d0f15254132ef47a139ee77d06dc"
+      "bytes": 6429,
+      "sha256": "4739136dc15d21429568f0d5fb9c7fc344cc6e939d7c93d5bc06ceb6aa1fb9a3"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
-      "bytes": 3925,
-      "sha256": "7bed0a61e52b068af9c4285ae2fc8cd6591f4508904b78a9a38b8f87e2f1afee"
+      "bytes": 3991,
+      "sha256": "ef92db819a6f65483c273b1d5032ad4914e56653459f932f97991a9925729f0e"
     },
     {
       "path": "public/icons/icon-512.png",

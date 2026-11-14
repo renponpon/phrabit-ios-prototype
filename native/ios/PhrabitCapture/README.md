@@ -51,7 +51,7 @@ node scripts/check-ios-prototype.mjs
 
 ## Mac環境でのビルド
 
-Xcode 16以上とXcodeGen 2.44以上が必要です。現状のプロジェクトにはAppleチームや証明書を設定しません。生成ファイルはローカルのみに置きます。
+最初の構成確認はXcode16.4で通過しましたが、2026年4月28日以降のApp Store Connect提出にはXcode26以上・iOS SDK26以上が必要です。配布準備用の手動CIは標準macos-26ランナー上のXcode26.2を指定し、バージョン不足時は停止するよう更新しました。対応端末の最小OSはiOS18のままです。XcodeGenは2.44以上を使用します。現状のプロジェクトにはAppleチームや証明書を設定しません。生成ファイルはローカルのみに置きます。
 
 ```sh
 cd native/ios/PhrabitCapture
@@ -70,6 +70,17 @@ xcodebuild -project PhrabitCapture.xcodeproj \
 本番や秘密情報を含めずに搬出する準備は、リポジトリ直下から`node scripts/prepare-ios-cloud-build.mjs`で行います。明示したファイルだけを`tmp/ios-cloud-build-20261114/`へコピーしてSHA-256を記録します。搬出先が既にある場合は、空の別フォルダーを第1引数で指定します。ファイルの公開・Git操作・クラウド実行はしません。
 
 このビルドはシミュレーター用です。ログが成功しても、自分のiPhoneへ入る署名済みアプリは生成しません。
+
+## TestFlight準備で本人が行うこと
+
+1. Apple Developerアカウントへ、普段iPhoneで使っているApple Accountでログインし、既存のメンバーシップがあるか確認します。パスワードや認証コードはチャットへ送らないでください。
+2. 未加入なら、Apple Developer Programの年額99米ドル相当・登録画面に表示される現地価格と更新条件を確認します。月3,000円のAI予算とは別の契約です。本人の同意・購入が必要で、自動では進めません。
+3. 個人登録では、将来ストアで販売元として正式な個人名が表示されます。Phrabitというブランド名だけを販売元として表示できる契約ではありません。法人名での表示を希望する場合は組織登録の条件を確認してから選びます。
+4. 加入が有効になってから、正式なBundle IDとApp Store Connectのアプリ情報を確認します。現在の`com.phrabit.quickcapture.prototype`は試作用です。長期公開用の候補は`com.phrabit.app`と拡張の`com.phrabit.app.control`で、利用可能性を確認・確定してから登録します。
+5. 署名用証明書・プロファイル・App Store Connectの認証を準備する段階で、用途・権限・保管先を説明して確認します。秘密情報は公開リポジトリ・チャット・実行ログへ置きません。GitHub環境の保護・実行するコミットの確認を先に行い、署名なしCIへ秘密情報を混ぜません。
+6. 最初は自分のApple Accountを内部テスターにして、iPhoneのTestFlightで受け取ります。一般公開の申請や外部テスターへの公開は別の操作です。契約・Appleでの処理待ちにより、その場で配布できるとは限りません。
+
+アプリ本体・コントロールにPrivacyInfo.xcprivacyを追加しました。UserDefaultsは端末内の設定、systemUptimeは録音経過時間、ファイルメタデータは自アプリの一時録音を確認する目的で宣言しています。現在の模擬版は音声を送らず追跡・データ収集を行わない構成です。実API接続時にはプライバシー申告と説明を見直します。このソース追加だけで、App Store Connectの申告や同意・審査を完了したとは扱いません。
 
 ## 実機テストと公開までの残作業
 
@@ -90,4 +101,7 @@ xcodebuild -project PhrabitCapture.xcodeproj \
 - [GitHub Actionsの公開リポジトリの料金](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
 - [手動実行とデフォルトブランチの条件](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
 - [TestFlight等の配布方法](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases)
+- [Apple Developer Program登録条件と価格](https://developer.apple.com/jp/help/account/membership/program-enrollment/)
+- [App Store Connectの提出SDK要件](https://developer.apple.com/news/upcoming-requirements/?id=04282026a)
+- [必須理由APIの分類と理由](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)
 
