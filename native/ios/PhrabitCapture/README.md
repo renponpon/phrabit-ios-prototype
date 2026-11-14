@@ -4,6 +4,8 @@
 
 初回にカスタムシンボルのガイド不足、2回目にAppIconの不足を検出し、修正版の3回目で成功しました。既存Phrabitロゴから1024pxの不透明AppIconを用意し、コントロールのシンボルとは別に設定しています。ActionsのNodeランタイム移行警告・macOSの待ち時間通知はありましたが、Swiftコンパイルの警告・エラーは出ていません。画面が実機で使えることや、App Storeの審査通過を意味しません。
 
+配布準備の追加検証：コミット`2fc30073074c30fe88252d077ed64078ff3ca59c`でXcode26.2・iOS SDK26.2のビルドとCore9件が成功しました。アプリとコントロールのPrivacyInfo.xcprivacyが実際の出力に含まれることも確認済みです。[SDK26の実行結果](https://github.com/renponpon/phrabit-ios-prototype/actions/runs/43597321827)を参照してください。Nodeランタイムの警告は解消しました。Apple側はサインイン待ちで、メンバーシップ・正式Bundle ID・署名・TestFlight配布は未設定です。
+
 ## 今回の範囲
 
 - iOS 18以上のiPhoneを対象にしたSwiftUIアプリとWidgetKitコントロール。
