@@ -1,0 +1,116 @@
+{
+  "mode": "unsigned-mock-only",
+  "containsProductionData": false,
+  "files": [
+    {
+      "path": "native/ios/PhrabitCapture/.gitignore",
+      "bytes": 132,
+      "sha256": "d62bb49467a30ddba06cfb9703b50dd0babeed7a0ecb574b560bd4ab340b7a13"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/README.md",
+      "bytes": 8664,
+      "sha256": "8191691a0b4e88a8035e5e217a7b0de813016213732df8661064cd8b447a53dc"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/project.yml",
+      "bytes": 1836,
+      "sha256": "3997ceabc43b2707b4a38f29c62e7ea9d509751e50c90c28739954bbcff47f96"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/App/AudioRecorder.swift",
+      "bytes": 6160,
+      "sha256": "78cb502570085dcd23fce35c69609d35c5c62d30b68bdd5e1c223108a3ba0f53"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/App/CaptureView.swift",
+      "bytes": 8938,
+      "sha256": "413088a1f63ac558ca056811097dc63c3c16943861506f772b35a9027a69d513"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/App/CaptureViewModel.swift",
+      "bytes": 3893,
+      "sha256": "e4fe47344e6aebf9ee5e1b837901356fdd4e251b18eb23db423da3ce51976a74"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/App/PhrabitCaptureApp.swift",
+      "bytes": 1094,
+      "sha256": "5692e39f2ac590d3aac00f10697f4e29e52ca00e704cef00b24f26ec7e5ae40f"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Control/PhrabitCaptureControl.swift",
+      "bytes": 799,
+      "sha256": "5f85337b3fabcb4374b516b4736aac265d7ac847009ff997394ae511adb7494d"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Core/Package.swift",
+      "bytes": 417,
+      "sha256": "ea0d50372ed8f7330f10df70a9ee676ef1c1123448299390161aaf499ea648c7"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Core/Sources/PhrabitCaptureCore/CaptureSession.swift",
+      "bytes": 2630,
+      "sha256": "56a4f0def35daa3e255c81928b58a6320aa3c9f1f927ad9cc9802493f624d2c4"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Core/Sources/PhrabitCaptureCore/MockTranslator.swift",
+      "bytes": 1096,
+      "sha256": "b418a1ebfc85e2a2325fb9bf65faa040e1b5543dc0aa7c076ffdd313f9e62723"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Core/Tests/PhrabitCaptureCoreTests/CaptureSessionTests.swift",
+      "bytes": 4406,
+      "sha256": "2d83ebedd1f1c88652c9d033d122e994de65a9b428ce12141b73358443ac054d"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Shared/CaptureLaunchRequest.swift",
+      "bytes": 604,
+      "sha256": "29aed5a8dc9f7d8795f99737a8571bc685b11b2e2d0809e9d35477bb885672e3"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Shared/OpenRecorderIntent.swift",
+      "bytes": 770,
+      "sha256": "b106538f6ebc8cbaeefc7b1abe40a39b8af86493da872f9bddc34f95ce14b72e"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Shared/Assets.xcassets/Contents.json",
+      "bytes": 61,
+      "sha256": "2a94d71613a1561f0ea52b5dcd8244421c14150a010ad1d0e6c6859a94990107"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Shared/Assets.xcassets/PhrabitControl.symbolset/Contents.json",
+      "bytes": 160,
+      "sha256": "48ec4a981d904e364f4aee7350cbcb5a54296b44b4c6f38e2942bd9047222ce2"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Shared/Assets.xcassets/PhrabitControl.symbolset/PhrabitControl.svg",
+      "bytes": 1185,
+      "sha256": "9249e6b317790df03639c9724d3110576e8f7b7cd87ab7453b3cab7e5560965b"
+    },
+    {
+      "path": ".github/workflows/ios-prototype.yml",
+      "bytes": 1744,
+      "sha256": "8a4cec176cbdcf6886b9f6cb9af9abbd21a10840ce3be125fa9bae8d9bc58c4f"
+    },
+    {
+      "path": "scripts/check-ios-prototype.mjs",
+      "bytes": 4901,
+      "sha256": "3fcf6610a7ef71925665bb69d850167a1d0916a11be999cd04125010093e7a25"
+    },
+    {
+      "path": "scripts/prepare-ios-cloud-build.mjs",
+      "bytes": 3517,
+      "sha256": "362658213916b4e92a5db6ea05b96982a373ae20ac5729352b525d92a45f9161"
+    },
+    {
+      "path": "public/icons/icon-512.png",
+      "bytes": 27619,
+      "sha256": "3e8b85ffb9aa278ab4271528353a766f905d482400f2c86b2781d903420da280"
+    },
+    {
+      "path": "README.md",
+      "bytes": 552,
+      "sha256": "90d7e4fa41f720d6ba951c0bef301920a7eadbd055014006d12ae40eb97d9054"
+    }
+  ]
+}

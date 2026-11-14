@@ -1,0 +1,13 @@
+.build/
+Core/.build/
+Core/.swiftpm/
+Generated/
+build/
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserstate
+*.p12
+*.mobileprovision
+*.p8
+*.m4a
+

@@ -1,0 +1,68 @@
+name: PhrabitCapture
+options:
+  minimumXcodeGenVersion: 2.44.0
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: ja
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  PhrabitCaptureCore:
+    path: Core
+targets:
+  PhrabitCapture:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Shared
+      - path: ../../../public/icons/icon-512.png
+        buildPhase: resources
+    dependencies:
+      - package: PhrabitCaptureCore
+      - target: PhrabitCaptureControl
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.quickcapture.prototype
+    info:
+      path: Generated/App-Info.plist
+      properties:
+        CFBundleDisplayName: Phrabit試作
+        LSRequiresIPhoneOS: true
+        NSMicrophoneUsageDescription: 翻訳したい一言を録音するために使用します。この試作版では音声を端末外へ送信しません。
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+  PhrabitCaptureControl:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Control
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.quickcapture.prototype.control
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: true
+    info:
+      path: Generated/Control-Info.plist
+      properties:
+        CFBundleDisplayName: Phrabit
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+schemes:
+  PhrabitCapture:
+    build:
+      targets:
+        PhrabitCapture: all
+    run:
+      config: Debug
+
