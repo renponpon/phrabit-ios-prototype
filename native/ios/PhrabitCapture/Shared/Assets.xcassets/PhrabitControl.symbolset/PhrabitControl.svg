@@ -3,8 +3,12 @@
     <text id="template-version">Template v.2.0</text>
   </g>
   <g id="Guides">
+    <line id="Baseline-S" x1="0" y1="696" x2="3300" y2="696"/>
+    <line id="Capline-S" x1="0" y1="620" x2="3300" y2="620"/>
     <line id="Baseline-M" x1="2400" y1="1556" x2="3300" y2="1556"/>
     <line id="Capline-M" x1="2400" y1="1461" x2="3300" y2="1461"/>
+    <line id="Baseline-L" x1="0" y1="2036" x2="3300" y2="2036"/>
+    <line id="Capline-L" x1="0" y1="1913" x2="3300" y2="1913"/>
     <line id="left-margin" x1="2855" y1="1400" x2="2855" y2="1600"/>
     <line id="right-margin" x1="2965" y1="1400" x2="2965" y2="1600"/>
   </g>

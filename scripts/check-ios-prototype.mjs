@@ -62,7 +62,12 @@ const checks = [
   ["Phrabit custom symbol asset referenced by the control", () => {
     const asset = JSON.parse(read("Shared/Assets.xcassets/PhrabitControl.symbolset/Contents.json"));
     assert.equal(asset.symbols[0].filename, "PhrabitControl.svg");
-    assert.match(read("Shared/Assets.xcassets/PhrabitControl.symbolset/PhrabitControl.svg"), /id="Regular-M"/);
+    const symbol = read("Shared/Assets.xcassets/PhrabitControl.symbolset/PhrabitControl.svg");
+    assert.match(symbol, /id="Regular-M"/);
+    for (const size of ["S", "M", "L"]) {
+      assert.ok(symbol.includes(`id="Baseline-${size}"`));
+      assert.ok(symbol.includes(`id="Capline-${size}"`));
+    }
     assert.match(read("Control/PhrabitCaptureControl.swift"), /Image\("PhrabitControl"\)/);
   }],
   ["cloud build is manual, gated, unsigned, and non-distributing", () => {

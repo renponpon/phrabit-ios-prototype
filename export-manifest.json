@@ -84,8 +84,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/Shared/Assets.xcassets/PhrabitControl.symbolset/PhrabitControl.svg",
-      "bytes": 1185,
-      "sha256": "9249e6b317790df03639c9724d3110576e8f7b7cd87ab7453b3cab7e5560965b"
+      "bytes": 1439,
+      "sha256": "6ffb08ea5a93a2cde0a5ffa7a10c6ce5d9a0305e98560fe19a98457ec6b12520"
     },
     {
       "path": ".github/workflows/ios-prototype.yml",
@@ -94,8 +94,8 @@
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 4901,
-      "sha256": "3fcf6610a7ef71925665bb69d850167a1d0916a11be999cd04125010093e7a25"
+      "bytes": 5093,
+      "sha256": "c420d1b41b91695c3f324c959ee0dc70101413610390bd27eb1738f9604ba1b5"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
