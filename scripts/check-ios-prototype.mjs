@@ -69,6 +69,9 @@ const checks = [
       assert.ok(symbol.includes(`id="Capline-${size}"`));
     }
     assert.match(read("Control/PhrabitCaptureControl.swift"), /Image\("PhrabitControl"\)/);
+    const appIcon = JSON.parse(read("App/Assets.xcassets/AppIcon.appiconset/Contents.json"));
+    assert.equal(appIcon.images[0].size, "1024x1024");
+    assert.equal(appIcon.images[0].filename, "AppIcon.png");
   }],
   ["cloud build is manual, gated, unsigned, and non-distributing", () => {
     const workflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");

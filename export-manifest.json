@@ -14,8 +14,23 @@
     },
     {
       "path": "native/ios/PhrabitCapture/project.yml",
-      "bytes": 1836,
-      "sha256": "3997ceabc43b2707b4a38f29c62e7ea9d509751e50c90c28739954bbcff47f96"
+      "bytes": 1935,
+      "sha256": "5be4d731d19bd92474aa692f5b4498d10120baa314d8ecc34fd5e9388f34673c"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/App/Assets.xcassets/Contents.json",
+      "bytes": 60,
+      "sha256": "f5fb0e1f3a8142892ed092efb5955c1c2cc537003a89ad7bbdb9dade7fe8985f"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/App/Assets.xcassets/AppIcon.appiconset/Contents.json",
+      "bytes": 203,
+      "sha256": "852920cb36e95beb53771138a4b8195a16fcce1cc31250632f246081cc638f9a"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/App/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+      "bytes": 134292,
+      "sha256": "c4784878cbe864f2573eaf5bc3e1a49b6fc6bd0d009779285292e4671080788b"
     },
     {
       "path": "native/ios/PhrabitCapture/App/AudioRecorder.swift",
@@ -94,13 +109,13 @@
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 5093,
-      "sha256": "c420d1b41b91695c3f324c959ee0dc70101413610390bd27eb1738f9604ba1b5"
+      "bytes": 5303,
+      "sha256": "a499759b3c63930575038cfe1f13080c2830d0f15254132ef47a139ee77d06dc"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
-      "bytes": 3517,
-      "sha256": "362658213916b4e92a5db6ea05b96982a373ae20ac5729352b525d92a45f9161"
+      "bytes": 3670,
+      "sha256": "ba1980cccde88f7d0f67737b019af64b036f36ef6e38ddeca66f97c3096fb1cf"
     },
     {
       "path": "public/icons/icon-512.png",
