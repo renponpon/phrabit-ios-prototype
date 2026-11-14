@@ -67,6 +67,8 @@ const readme = [
   "",
   "手動ビルドは標準macOSランナーで行い、ArtifactやCacheは保存しません。",
   "",
+  "[クラウドビルドの実行結果](https://github.com/renponpon/phrabit-ios-prototype/actions/workflows/ios-prototype.yml)で、検証したコミットと結果を確認できます。ビルド成功とiPhoneの実機検証は別です。",
+  "",
   "実装内容・未確認事項・検証手順は [native README](native/ios/PhrabitCapture/README.md) を参照してください。",
   ""
 ].join("\n");

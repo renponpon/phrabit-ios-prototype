@@ -9,8 +9,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/README.md",
-      "bytes": 8664,
-      "sha256": "8191691a0b4e88a8035e5e217a7b0de813016213732df8661064cd8b447a53dc"
+      "bytes": 9499,
+      "sha256": "ca72d7eb2fc5892a5dbe1a752251fa2d6d25181f7d4fb08463be2533f29aa78b"
     },
     {
       "path": "native/ios/PhrabitCapture/project.yml",
@@ -114,8 +114,8 @@
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
-      "bytes": 3670,
-      "sha256": "ba1980cccde88f7d0f67737b019af64b036f36ef6e38ddeca66f97c3096fb1cf"
+      "bytes": 3925,
+      "sha256": "7bed0a61e52b068af9c4285ae2fc8cd6591f4508904b78a9a38b8f87e2f1afee"
     },
     {
       "path": "public/icons/icon-512.png",
@@ -124,8 +124,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 552,
-      "sha256": "90d7e4fa41f720d6ba951c0bef301920a7eadbd055014006d12ae40eb97d9054"
+      "bytes": 797,
+      "sha256": "9c4f6c13978d225be7c4b3848561d2d154168e391648ac29c89886d6722fadcf"
     }
   ]
 }
