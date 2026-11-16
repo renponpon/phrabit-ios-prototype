@@ -144,13 +144,13 @@
     },
     {
       "path": "scripts/ios-testflight.mjs",
-      "bytes": 13372,
-      "sha256": "16ff9c800097d5065afe6459d568c754ed28befd9f05061d21bd3d7724d41910"
+      "bytes": 14929,
+      "sha256": "2678cfda96724f3ca06cc4e292dcbe0692e756d821bca71ea940d8cef53e2f8e"
     },
     {
       "path": "scripts/ios-testflight.test.mjs",
-      "bytes": 3291,
-      "sha256": "2afe5e18ec2fe33422b695e943801f140d43864d3980051baaaa5b2614f0d25b"
+      "bytes": 3819,
+      "sha256": "e8ee59b27796d6e1157ceb8ab04ceeddb459f49f0b0eb13441ab71fe4201e189"
     },
     {
       "path": "public/icons/icon-512.png",

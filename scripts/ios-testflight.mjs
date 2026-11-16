@@ -21,12 +21,20 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber) {
   assert.match(controlUuid, /^[A-F0-9-]{36}$/i);
   assert.notEqual(appUuid, controlUuid);
   assert.match(buildNumber, /^[1-9]\d{0,3}\.[1-9]\d{0,3}$/);
+  const signing = {
+    DEVELOPMENT_TEAM: teamId,
+    CODE_SIGN_STYLE: 'Manual',
+    CODE_SIGN_IDENTITY: 'Apple Distribution',
+    'CODE_SIGN_IDENTITY[sdk=iphoneos*]': 'Apple Distribution',
+    CURRENT_PROJECT_VERSION: buildNumber,
+    MARKETING_VERSION: '0.1.0'
+  };
   return {
     include: ['project.yml'],
-    settings: { base: { DEVELOPMENT_TEAM: teamId, CODE_SIGN_STYLE: 'Manual', CODE_SIGN_IDENTITY: 'Apple Distribution', CURRENT_PROJECT_VERSION: buildNumber } },
+    settings: { base: signing },
     targets: {
-      PhrabitCapture: { settings: { base: { PROVISIONING_PROFILE_SPECIFIER: appUuid } } },
-      PhrabitCaptureControl: { settings: { base: { PROVISIONING_PROFILE_SPECIFIER: controlUuid } } }
+      PhrabitCapture: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: appUuid } } },
+      PhrabitCaptureControl: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: controlUuid } } }
     }
   };
 }
@@ -142,6 +150,8 @@ function main(stage) {
     const identities = run('security', ['find-identity', '-v', '-p', 'codesigning', keychainPath], 'signing-identities');
     assert.match(identities, /1 valid identities found/, 'Exactly one valid distribution identity is required');
     state.buildNumber = `${environment.GITHUB_RUN_NUMBER}.${environment.GITHUB_RUN_ATTEMPT}`;
+    state.teamId = requireSecret('APPLE_TEAM_ID');
+    state.profileUuids = { PhrabitCapture: profiles[0].UUID, PhrabitCaptureControl: profiles[1].UUID };
     const spec = distributionSpec(requireSecret('APPLE_TEAM_ID'), profiles[0].UUID, profiles[1].UUID, state.buildNumber);
     writeFileSync(path.join(prototype, 'distribution.json'), JSON.stringify(spec), { mode: 0o600 });
     const options = { method: 'app-store-connect', teamID: requireSecret('APPLE_TEAM_ID'), signingStyle: 'manual', signingCertificate: 'Apple Distribution', manageAppVersionAndBuildNumber: false, provisioningProfiles: { 'com.phrabit.app': profiles[0].UUID, 'com.phrabit.app.control': profiles[1].UUID } };
@@ -154,8 +164,19 @@ function main(stage) {
     assert.match(run('xcodebuild', ['-version'], 'xcode-version'), /^Xcode 26\./);
     assert.match(run('xcrun', ['--sdk', 'iphoneos', '--show-sdk-version'], 'ios-sdk'), /^26\./);
     run('xcodegen', ['generate', '--spec', 'distribution.json'], 'project-generate');
+    const generatedSettings = JSON.parse(run('xcodebuild', ['-project', 'PhrabitCapture.xcodeproj', '-scheme', 'PhrabitCapture', '-configuration', 'Release', '-sdk', 'iphoneos', '-showBuildSettings', '-json'], 'generated-signing-settings'));
+    for (const target of ['PhrabitCapture', 'PhrabitCaptureControl']) {
+      const targetSettings = generatedSettings.find((entry) => entry.target === target)?.buildSettings;
+      assert.ok(targetSettings, 'Missing expected target build settings');
+      assert.equal(targetSettings.CODE_SIGN_STYLE, 'Manual', 'Target must use manual distribution signing');
+      assert.equal(targetSettings.CODE_SIGN_IDENTITY, 'Apple Distribution', 'Target selected the wrong certificate type');
+      assert.equal(targetSettings.DEVELOPMENT_TEAM, state.teamId, 'Target selected the wrong team');
+      assert.equal(targetSettings.PROVISIONING_PROFILE_SPECIFIER, state.profileUuids[target], 'Target selected the wrong profile');
+      assert.equal(targetSettings.CURRENT_PROJECT_VERSION, state.buildNumber, 'Target build version mismatch');
+    }
+    console.log('Manual distribution identity, team, profile, and build version verified for both targets.');
     const archivePath = path.join(privateRoot, 'PhrabitCapture.xcarchive');
-    run('xcodebuild', ['-project', 'PhrabitCapture.xcodeproj', '-scheme', 'PhrabitCapture', '-configuration', 'Release', '-destination', 'generic/platform=iOS', '-archivePath', archivePath, '-derivedDataPath', path.join(privateRoot, 'DerivedData'), 'archive'], 'signed-archive');
+    run('xcodebuild', ['-project', 'PhrabitCapture.xcodeproj', '-scheme', 'PhrabitCapture', '-configuration', 'Release', '-destination', 'generic/platform=iOS', '-archivePath', archivePath, '-derivedDataPath', path.join(privateRoot, 'DerivedData'), `OTHER_CODE_SIGN_FLAGS=--keychain ${keychainPath}`, 'archive'], 'signed-archive');
     const appPath = path.join(archivePath, 'Products/Applications/PhrabitCapture.app');
     const controlPath = path.join(appPath, 'PlugIns/PhrabitCaptureControl.appex');
     for (const [bundlePath, identifier] of [[appPath, 'com.phrabit.app'], [controlPath, 'com.phrabit.app.control']]) {
