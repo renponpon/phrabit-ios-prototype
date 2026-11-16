@@ -88,12 +88,22 @@ function main(stage) {
       const profilePath = path.join(privateRoot, `${secretName}.mobileprovision`);
       writePrivate(profilePath, Buffer.from(requireSecret(secretName), 'base64'));
       const profileXml = run('security', ['cms', '-D', '-i', profilePath], `${secretName}-decode`);
-      const profile = JSON.parse(run('python3', ['-c', 'import datetime,json,plistlib,sys; json.dump(plistlib.load(sys.stdin.buffer),sys.stdout,default=lambda value: value.isoformat() if isinstance(value,datetime.datetime) else None)'], `${secretName}-parse`, { input: profileXml }));
+      const xmlPath = path.join(privateRoot, `${secretName}.plist`);
+      writePrivate(xmlPath, profileXml);
+      run('plutil', ['-lint', xmlPath], `${secretName}-plist-validation`);
+      const extract = (key, format) => run('plutil', ['-extract', key, format, '-o', '-', xmlPath], `${secretName}-${key.replaceAll('.', '-')}`).trim();
+      const profile = {
+        TeamIdentifier: JSON.parse(extract('TeamIdentifier', 'json')),
+        Entitlements: JSON.parse(extract('Entitlements', 'json')),
+        UUID: extract('UUID', 'raw'),
+        ExpirationDate: extract('ExpirationDate', 'raw')
+      };
       assert.equal(profile.TeamIdentifier[0], requireSecret('APPLE_TEAM_ID'));
       assert.equal(profile.Entitlements['application-identifier'], `${profile.TeamIdentifier[0]}.${bundleId}`);
       assert.equal(profile.Entitlements['get-task-allow'], false);
       assert.equal(profile.ProvisionedDevices, undefined);
       assert.equal(profile.ProvisionsAllDevices, undefined);
+      assert.doesNotMatch(profileXml, /<key>\s*(ProvisionedDevices|ProvisionsAllDevices)\s*<\/key>/);
       assert.ok(Date.parse(profile.ExpirationDate) > Date.now());
       profiles.push(profile);
       for (const folder of ['Library/MobileDevice/Provisioning Profiles', 'Library/Developer/Xcode/UserData/Provisioning Profiles']) {

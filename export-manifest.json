@@ -144,8 +144,8 @@
     },
     {
       "path": "scripts/ios-testflight.mjs",
-      "bytes": 11945,
-      "sha256": "99ef46018e1bc6955f7209f4029c652fbec6cd087b59935db680ee64ddc5e28d"
+      "bytes": 12366,
+      "sha256": "65c436a00dc19877cf217e4cce2f6c24e437ae817e04e071d8389d1ebfb808e0"
     },
     {
       "path": "scripts/ios-testflight.test.mjs",
