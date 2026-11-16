@@ -4,7 +4,11 @@
 
 初回にカスタムシンボルのガイド不足、2回目にAppIconの不足を検出し、修正版の3回目で成功しました。既存Phrabitロゴから1024pxの不透明AppIconを用意し、コントロールのシンボルとは別に設定しています。ActionsのNodeランタイム移行警告・macOSの待ち時間通知はありましたが、Swiftコンパイルの警告・エラーは出ていません。画面が実機で使えることや、App Storeの審査通過を意味しません。
 
-配布準備の追加検証：コミット`2fc30073074c30fe88252d077ed64078ff3ca59c`でXcode26.2・iOS SDK26.2のビルドとCore9件が成功しました。アプリとコントロールのPrivacyInfo.xcprivacyが実際の出力に含まれることも確認済みです。[SDK26の実行結果](https://github.com/renponpon/phrabit-ios-prototype/actions/runs/43597321827)を参照してください。Nodeランタイムの警告は解消しました。正式Bundle ID・署名・TestFlight配布は未設定です。
+配布準備の追加検証：コミット`2fc30073074c30fe88252d077ed64078ff3ca59c`でXcode26.2・iOS SDK26.2のビルドとCore9件が成功しました。アプリとコントロールのPrivacyInfo.xcprivacyが実際の出力に含まれることも確認済みです。[SDK26の実行結果](https://github.com/renponpon/phrabit-ios-prototype/actions/runs/43597321827)を参照してください。Nodeランタイムの警告は解消しました。
+
+2026年11月17日の`1140ee0`では、登録済みのBundle IDで静的9項目・公開搬出ポリシー6件・Core9件・未署名Simulatorビルド・未署名iPhone用Release archive・本体と拡張のIDおよびプライバシー宣言の同梱確認が成功しました。[実行結果](https://github.com/renponpon/phrabit-ios-prototype/actions/runs/43909442072)を参照してください。署名・配布・実機動作は未検証です。
+
+このarchiveで検出した画面方向の警告への対応として、4方向を宣言し、古い`UIRequiresFullScreen`は追加しません。生成したInfo.plistの方向リストとarchiveログの警告をCIで検査します。この設定変更を実機の横画面表示まで確認済みとは扱いません。
 
 ## アプリ識別子と配布前検査
 

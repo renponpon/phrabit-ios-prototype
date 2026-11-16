@@ -38,6 +38,18 @@ const checks = [
     assert.deepEqual(identifiers, ["com.phrabit.app", "com.phrabit.app.control"]);
     assert.doesNotMatch(read("project.yml"), /com\.phrabit\.quickcapture\.prototype/);
   }],
+  ["application supports rotation without a deprecated fullscreen requirement", () => {
+    const project = read("project.yml");
+    const orientations = [...project.matchAll(/^          - (UIInterfaceOrientation\w+)$/gm)]
+      .map((match) => match[1]);
+    assert.deepEqual(orientations, [
+      "UIInterfaceOrientationPortrait",
+      "UIInterfaceOrientationPortraitUpsideDown",
+      "UIInterfaceOrientationLandscapeLeft",
+      "UIInterfaceOrientationLandscapeRight"
+    ]);
+    assert.doesNotMatch(project, /UIRequiresFullScreen/);
+  }],
   ["prototype cannot invoke translation or transcription APIs", () => {
     const swiftSources = listFiles(prototypeRoot)
       .filter((file) => file.endsWith(".swift"))
@@ -94,6 +106,8 @@ const checks = [
     assert.match(workflow, /Build unsigned iPhone archive/);
     assert.match(workflow, /generic\/platform=iOS'/);
     assert.match(workflow, /Verify unsigned iPhone archive identifiers and privacy/);
+    assert.match(workflow, /UISupportedInterfaceOrientations json/);
+    assert.match(workflow, /All interface orientations must be supported/);
     assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 2);
     assert.doesNotMatch(workflow, /^\s+(push|pull_request|schedule):/m);
     assert.doesNotMatch(workflow, /secrets\.|upload_to_testflight|app-store-connect|vercel|curl|\.env/);

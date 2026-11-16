@@ -9,13 +9,13 @@
     },
     {
       "path": "native/ios/PhrabitCapture/README.md",
-      "bytes": 13294,
-      "sha256": "6d21611993ea81a2ce14884ea512e29471742e8acb36a210e2dd01186a8fc08c"
+      "bytes": 14012,
+      "sha256": "186eec0321097a8f1f2199ccd17beb53901735ad59f029a064f79c9616704d24"
     },
     {
       "path": "native/ios/PhrabitCapture/project.yml",
-      "bytes": 1897,
-      "sha256": "2e12e569f7696397f91a48458d1675bfe8e41035df3ffd3555ab855a2ac434c0"
+      "bytes": 2047,
+      "sha256": "4e9008f79048d1e89c6eb391740211fd84ac6f4a26651a28ead27f1b9dc509bb"
     },
     {
       "path": "native/ios/PhrabitCapture/App/Assets.xcassets/Contents.json",
@@ -114,13 +114,13 @@
     },
     {
       "path": ".github/workflows/ios-prototype.yml",
-      "bytes": 4379,
-      "sha256": "40d06459fc58cedb9d78bd41d9703c17b960fb5c482df12b2b809e40fc8b9f31"
+      "bytes": 5556,
+      "sha256": "2ed151cb6d0f5f1958adec2535f7490d595f2fc8099922c811a5e163725a2cfd"
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 7179,
-      "sha256": "3d3ceed41b023b8993eae6ffdf2cc3b373ea58b4202a92453f8c78617e582099"
+      "bytes": 7869,
+      "sha256": "4cf287ecb8a8a991453c16c0c66d89eb53977c8735d38ac56fda8bf7e4d14405"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",

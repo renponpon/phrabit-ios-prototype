@@ -74,6 +74,19 @@ jobs:
           test -f "$controlPath/PrivacyInfo.xcprivacy"
           plutil -lint "$appPath/PrivacyInfo.xcprivacy" "$controlPath/PrivacyInfo.xcprivacy"
           plutil -extract DTSDKName raw -o - "$appPath/Info.plist"
+          plutil -extract UISupportedInterfaceOrientations json -o build/iphone-orientations.json "$appPath/Info.plist"
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const orientations = JSON.parse(fs.readFileSync('build/iphone-orientations.json', 'utf8'));
+          assert.deepEqual([...orientations].sort(), [
+            'UIInterfaceOrientationLandscapeLeft',
+            'UIInterfaceOrientationLandscapeRight',
+            'UIInterfaceOrientationPortrait',
+            'UIInterfaceOrientationPortraitUpsideDown'
+          ]);
+          process.stdout.write('All four interface orientations are declared.\n');
+          NODE
       - name: Build unsigned iPhone archive
         working-directory: native/ios/PhrabitCapture
         run: |
@@ -99,4 +112,11 @@ jobs:
           test -f "$controlPath/PrivacyInfo.xcprivacy"
           plutil -lint "$appPath/PrivacyInfo.xcprivacy" "$controlPath/PrivacyInfo.xcprivacy"
           plutil -extract DTSDKName raw -o - "$appPath/Info.plist"
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const archiveLog = fs.readFileSync('build/device-archive.log', 'utf8');
+          assert.ok(!archiveLog.includes('All interface orientations must be supported'), 'Resolve the orientation warning before distribution');
+          process.stdout.write('No interface-orientation warning in the iPhone archive build.\n');
+          NODE
 
