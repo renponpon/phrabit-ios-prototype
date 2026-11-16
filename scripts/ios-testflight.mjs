@@ -29,12 +29,13 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber) {
     CURRENT_PROJECT_VERSION: buildNumber,
     MARKETING_VERSION: '0.1.0'
   };
+  const info = { properties: { CFBundleVersion: '$(CURRENT_PROJECT_VERSION)', CFBundleShortVersionString: '$(MARKETING_VERSION)' } };
   return {
     include: ['project.yml'],
     settings: { base: signing },
     targets: {
-      PhrabitCapture: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: appUuid } } },
-      PhrabitCaptureControl: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: controlUuid } } }
+      PhrabitCapture: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: appUuid } }, info },
+      PhrabitCaptureControl: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: controlUuid } }, info }
     }
   };
 }
@@ -175,8 +176,8 @@ function main(stage) {
       assert.ok(targetSettings, 'Missing expected target build settings');
       assert.equal(targetSettings.CODE_SIGN_STYLE, 'Manual', 'Target must use manual distribution signing');
       assert.equal(targetSettings.CODE_SIGN_IDENTITY, 'Apple Distribution', 'Target selected the wrong certificate type');
-      assert.equal(targetSettings.DEVELOPMENT_TEAM, state.teamId, 'Target selected the wrong team');
-      assert.equal(targetSettings.PROVISIONING_PROFILE_SPECIFIER, state.profileUuids[target], 'Target selected the wrong profile');
+      assert.ok(targetSettings.DEVELOPMENT_TEAM === state.teamId, 'Target selected the wrong team');
+      assert.ok(targetSettings.PROVISIONING_PROFILE_SPECIFIER === state.profileUuids[target], 'Target selected the wrong profile');
       assert.equal(targetSettings.CURRENT_PROJECT_VERSION, state.buildNumber, 'Target build version mismatch');
     }
     console.log('Manual distribution identity, team, profile, and build version verified for both targets.');
@@ -187,9 +188,10 @@ function main(stage) {
     for (const [bundlePath, identifier] of [[appPath, 'com.phrabit.app'], [controlPath, 'com.phrabit.app.control']]) {
       assert.equal(run('plutil', ['-extract', 'CFBundleIdentifier', 'raw', '-o', '-', path.join(bundlePath, 'Info.plist')], `${identifier}-id`).trim(), identifier);
       assert.ok(existsSync(path.join(bundlePath, 'PrivacyInfo.xcprivacy')));
+      assert.equal(run('plutil', ['-extract', 'CFBundleVersion', 'raw', '-o', '-', path.join(bundlePath, 'Info.plist')], `${identifier}-build-version`).trim(), state.buildNumber, 'Bundle build version mismatch');
+      assert.equal(run('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', path.join(bundlePath, 'Info.plist')], `${identifier}-marketing-version`).trim(), '0.1.0', 'Bundle marketing version mismatch');
       run('codesign', ['--verify', '--strict', bundlePath], `${identifier}-signature`);
     }
-    assert.equal(run('plutil', ['-extract', 'CFBundleVersion', 'raw', '-o', '-', path.join(appPath, 'Info.plist')], 'build-version').trim(), state.buildNumber);
     const exportPath = path.join(privateRoot, 'export');
     run('xcodebuild', ['-exportArchive', '-archivePath', archivePath, '-exportPath', exportPath, '-exportOptionsPlist', path.join(privateRoot, 'ExportOptions.plist')], 'ipa-export');
     const packages = readdirSync(exportPath).filter((filename) => filename.endsWith('.ipa'));

@@ -31,6 +31,8 @@ test('keeps per-target manual signing profiles separate', () => {
     assert.equal(spec.targets[target].settings.base['CODE_SIGN_IDENTITY[sdk=iphoneos*]'], 'Apple Distribution');
     assert.equal(spec.targets[target].settings.base.CURRENT_PROJECT_VERSION, '1.1');
     assert.equal(spec.targets[target].settings.base.MARKETING_VERSION, '0.1.0');
+    assert.equal(spec.targets[target].info.properties.CFBundleVersion, '$(CURRENT_PROJECT_VERSION)');
+    assert.equal(spec.targets[target].info.properties.CFBundleShortVersionString, '$(MARKETING_VERSION)');
   }
 });
 test('rejects invalid team, duplicate profiles, and invalid build versions', () => {
