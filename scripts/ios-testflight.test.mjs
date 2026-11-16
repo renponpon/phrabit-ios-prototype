@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { classifyCommandFailure, distributionSpec, validateExecution } from './ios-testflight.mjs';
+import { classifyCommandFailure, distributionSpec, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
 
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
@@ -55,4 +55,14 @@ test('diagnostics disclose only fixed categories or Apple error codes', () => {
   assert.equal(classifyCommandFailure('unable to build chain to self-signed root'), 'CERTIFICATE_TRUST_CHAIN');
   assert.equal(classifyCommandFailure('upload rejected ITMS-90161'), 'ITMS-90161');
   assert.equal(classifyCommandFailure('synthetic private command details'), 'PRIVATE_DIAGNOSTICS_SUPPRESSED');
+});
+
+test('queries each explicit target rather than assuming scheme includes dependencies', () => {
+  for (const target of ['PhrabitCapture', 'PhrabitCaptureControl']) {
+    const argumentsList = targetSettingsArguments(target);
+    assert.equal(argumentsList[argumentsList.indexOf('-target') + 1], target);
+    assert.ok(argumentsList.includes('-showBuildSettings'));
+    assert.ok(!argumentsList.includes('-scheme'));
+  }
+  assert.throws(() => targetSettingsArguments('UnexpectedTarget'));
 });

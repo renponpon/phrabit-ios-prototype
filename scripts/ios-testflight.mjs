@@ -56,6 +56,11 @@ export function classifyCommandFailure(output) {
   return 'PRIVATE_DIAGNOSTICS_SUPPRESSED';
 }
 
+export function targetSettingsArguments(target) {
+  assert.ok(['PhrabitCapture', 'PhrabitCaptureControl'].includes(target));
+  return ['-project', 'PhrabitCapture.xcodeproj', '-target', target, '-configuration', 'Release', '-sdk', 'iphoneos', '-showBuildSettings', '-json'];
+}
+
 function main(stage) {
   const environment = process.env;
   assert.ok(environment.RUNNER_TEMP, 'Runner temporary directory is required');
@@ -164,8 +169,8 @@ function main(stage) {
     assert.match(run('xcodebuild', ['-version'], 'xcode-version'), /^Xcode 26\./);
     assert.match(run('xcrun', ['--sdk', 'iphoneos', '--show-sdk-version'], 'ios-sdk'), /^26\./);
     run('xcodegen', ['generate', '--spec', 'distribution.json'], 'project-generate');
-    const generatedSettings = JSON.parse(run('xcodebuild', ['-project', 'PhrabitCapture.xcodeproj', '-scheme', 'PhrabitCapture', '-configuration', 'Release', '-sdk', 'iphoneos', '-showBuildSettings', '-json'], 'generated-signing-settings'));
     for (const target of ['PhrabitCapture', 'PhrabitCaptureControl']) {
+      const generatedSettings = JSON.parse(run('xcodebuild', targetSettingsArguments(target), `generated-signing-settings-${target}`));
       const targetSettings = generatedSettings.find((entry) => entry.target === target)?.buildSettings;
       assert.ok(targetSettings, 'Missing expected target build settings');
       assert.equal(targetSettings.CODE_SIGN_STYLE, 'Manual', 'Target must use manual distribution signing');
