@@ -72,4 +72,29 @@ jobs:
           test -f "$controlPath/PrivacyInfo.xcprivacy"
           plutil -lint "$appPath/PrivacyInfo.xcprivacy" "$controlPath/PrivacyInfo.xcprivacy"
           plutil -extract DTSDKName raw -o - "$appPath/Info.plist"
+      - name: Build unsigned iPhone archive
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project PhrabitCapture.xcodeproj \
+            -scheme PhrabitCapture \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/PhrabitCapture.xcarchive \
+            -derivedDataPath build/DeviceDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            archive 2>&1 | tee build/device-archive.log
+      - name: Verify unsigned iPhone archive identifiers and privacy
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          appPath=build/PhrabitCapture.xcarchive/Products/Applications/PhrabitCapture.app
+          controlPath="$appPath/PlugIns/PhrabitCaptureControl.appex"
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$appPath/Info.plist")" = com.phrabit.app
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$controlPath/Info.plist")" = com.phrabit.app.control
+          test -f "$appPath/PrivacyInfo.xcprivacy"
+          test -f "$controlPath/PrivacyInfo.xcprivacy"
+          plutil -lint "$appPath/PrivacyInfo.xcprivacy" "$controlPath/PrivacyInfo.xcprivacy"
+          plutil -extract DTSDKName raw -o - "$appPath/Info.plist"
 

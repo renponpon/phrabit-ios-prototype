@@ -32,6 +32,12 @@ const checks = [
     assert.match(read("Shared/OpenRecorderIntent.swift"), /CaptureLaunchRequest\.enqueue/);
     assert.match(read("App/PhrabitCaptureApp.swift"), /handlePendingLaunch/);
   }],
+  ["registered application and control identifiers stay aligned", () => {
+    const identifiers = [...read("project.yml").matchAll(/PRODUCT_BUNDLE_IDENTIFIER: ([^\s]+)/g)]
+      .map((match) => match[1]);
+    assert.deepEqual(identifiers, ["com.phrabit.app", "com.phrabit.app.control"]);
+    assert.doesNotMatch(read("project.yml"), /com\.phrabit\.quickcapture\.prototype/);
+  }],
   ["prototype cannot invoke translation or transcription APIs", () => {
     const swiftSources = listFiles(prototypeRoot)
       .filter((file) => file.endsWith(".swift"))
@@ -84,6 +90,10 @@ const checks = [
     assert.match(workflow, /DEVELOPER_DIR: \/Applications\/Xcode_26\.2\.app\/Contents\/Developer/);
     assert.match(workflow, /Verify distribution-compatible toolchain/);
     assert.match(workflow, /Verify bundled privacy manifests/);
+    assert.match(workflow, /Build unsigned iPhone archive/);
+    assert.match(workflow, /generic\/platform=iOS'/);
+    assert.match(workflow, /Verify unsigned iPhone archive identifiers and privacy/);
+    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 2);
     assert.doesNotMatch(workflow, /^\s+(push|pull_request|schedule):/m);
     assert.doesNotMatch(workflow, /secrets\.|upload_to_testflight|app-store-connect|vercel|curl|\.env/);
     assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
