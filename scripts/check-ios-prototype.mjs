@@ -90,6 +90,7 @@ const checks = [
     assert.match(workflow, /DEVELOPER_DIR: \/Applications\/Xcode_26\.2\.app\/Contents\/Developer/);
     assert.match(workflow, /Verify distribution-compatible toolchain/);
     assert.match(workflow, /Verify bundled privacy manifests/);
+    assert.match(workflow, /node --test scripts\/ios-public-export-policy\.test\.mjs/);
     assert.match(workflow, /Build unsigned iPhone archive/);
     assert.match(workflow, /generic\/platform=iOS'/);
     assert.match(workflow, /Verify unsigned iPhone archive identifiers and privacy/);

@@ -38,6 +38,8 @@ jobs:
           node -e 'const [xcode, sdk] = process.argv.slice(1); if (Number(xcode.replace("Xcode ", "").split(".")[0]) < 26 || Number(sdk.split(".")[0]) < 26) throw new Error("Xcode 26+ and iOS SDK 26+ are required for distribution preparation");' "$xcodeVersion" "$iosSdkVersion"
       - name: Validate prototype safety boundaries
         run: node scripts/check-ios-prototype.mjs
+      - name: Test public export policy
+        run: node --test scripts/ios-public-export-policy.test.mjs
       - name: Test native core
         run: swift test --package-path native/ios/PhrabitCapture/Core
       - name: Install project generator

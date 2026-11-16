@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertPublicDocumentation } from "./ios-public-export-policy.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const destination = path.resolve(root, process.argv[2] ?? "tmp/ios-cloud-build-20261114");
@@ -36,10 +37,13 @@ const files = [
   ".github/workflows/ios-prototype.yml",
   "scripts/check-ios-prototype.mjs",
   "scripts/prepare-ios-cloud-build.mjs",
+  "scripts/ios-public-export-policy.mjs",
+  "scripts/ios-public-export-policy.test.mjs",
   "public/icons/icon-512.png"
 ];
 
 assert.ok(destination.startsWith(path.join(root, "tmp") + path.sep));
+assertPublicDocumentation(readFileSync(path.join(root, prototype, "README.md"), "utf8"));
 mkdirSync(destination, { recursive: true });
 assert.equal(readdirSync(destination).length, 0, "搬出先は空である必要があります。既存ファイルを上書きしません。");
 
