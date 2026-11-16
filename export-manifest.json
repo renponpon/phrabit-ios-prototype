@@ -1,5 +1,5 @@
 {
-  "mode": "unsigned-mock-only",
+  "mode": "offline-prototype-with-separate-gated-distribution",
   "containsProductionData": false,
   "files": [
     {
@@ -9,8 +9,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/README.md",
-      "bytes": 14012,
-      "sha256": "186eec0321097a8f1f2199ccd17beb53901735ad59f029a064f79c9616704d24"
+      "bytes": 14831,
+      "sha256": "f257338e677bde02e1a3bf790686a4e89a0e72b1bbe27b9b658e2a530cecf166"
     },
     {
       "path": "native/ios/PhrabitCapture/project.yml",
@@ -118,14 +118,19 @@
       "sha256": "2ed151cb6d0f5f1958adec2535f7490d595f2fc8099922c811a5e163725a2cfd"
     },
     {
+      "path": ".github/workflows/ios-testflight.yml",
+      "bytes": 2722,
+      "sha256": "cfa49732809093df65e8eae93c8e325e4b67454de0ebb65d6a4d1bcad0caa8b7"
+    },
+    {
       "path": "scripts/check-ios-prototype.mjs",
       "bytes": 7869,
       "sha256": "4cf287ecb8a8a991453c16c0c66d89eb53977c8735d38ac56fda8bf7e4d14405"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
-      "bytes": 4246,
-      "sha256": "fc98adda22a5a9a5cfe549c9957e12ca28826a191051e5e26c98c029da83331f"
+      "bytes": 4622,
+      "sha256": "18475208346319a2ad3853204fd51ca7ca3e9d13e8e158c4ddb274f1ed18e6be"
     },
     {
       "path": "scripts/ios-public-export-policy.mjs",
@@ -138,14 +143,24 @@
       "sha256": "3b1c6ad4b1b9ddc263358382484d96ea4e8ae8b516a5e6b9de47098f1150f1d9"
     },
     {
+      "path": "scripts/ios-testflight.mjs",
+      "bytes": 11945,
+      "sha256": "99ef46018e1bc6955f7209f4029c652fbec6cd087b59935db680ee64ddc5e28d"
+    },
+    {
+      "path": "scripts/ios-testflight.test.mjs",
+      "bytes": 2728,
+      "sha256": "ce995cd583cfdc0cf9c4ef867933a1e4cc6d228df3835b8137ee63b28db7a106"
+    },
+    {
       "path": "public/icons/icon-512.png",
       "bytes": 27619,
       "sha256": "3e8b85ffb9aa278ab4271528353a766f905d482400f2c86b2781d903420da280"
     },
     {
       "path": "README.md",
-      "bytes": 797,
-      "sha256": "9c4f6c13978d225be7c4b3848561d2d154168e391648ac29c89886d6722fadcf"
+      "bytes": 1025,
+      "sha256": "d423a9fb8e579e71371b28556cfa597e087092bada181b05016bacf22b42b54c"
     }
   ]
 }
