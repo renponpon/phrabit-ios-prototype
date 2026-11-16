@@ -31,6 +31,23 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber) {
   };
 }
 
+export function classifyCommandFailure(output) {
+  const appleCode = output.match(/\bITMS-\d{5}\b/);
+  if (appleCode) return appleCode[0];
+  for (const [pattern, code] of [
+    [/User interaction is not allowed|errSecInternalComponent/i, 'KEYCHAIN_ACCESS'],
+    [/unable to build chain|CSSMERR_TP_NOT_TRUSTED/i, 'CERTIFICATE_TRUST_CHAIN'],
+    [/No signing certificate|No valid signing identities/i, 'SIGNING_IDENTITY'],
+    [/Provisioning profile.*(?:does not|doesn't|invalid|expired)/i, 'PROVISIONING_PROFILE'],
+    [/private key.*(?:not found|could not)|could not find.*private key/i, 'API_KEY_LOOKUP'],
+    [/unknown option|unrecognized argument/i, 'TOOL_ARGUMENT'],
+    [/No such file or directory|command not found/i, 'TOOL_OR_FILE_MISSING']
+  ]) {
+    if (pattern.test(output)) return code;
+  }
+  return 'PRIVATE_DIAGNOSTICS_SUPPRESSED';
+}
+
 function main(stage) {
   const environment = process.env;
   assert.ok(environment.RUNNER_TEMP, 'Runner temporary directory is required');
@@ -46,7 +63,7 @@ function main(stage) {
   const run = (command, argumentsList, label, options = {}) => {
     const result = spawnSync(command, argumentsList, { cwd: prototype, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 600000, ...options });
     if (existsSync(privateRoot)) writeFileSync(path.join(privateRoot, `${label}.log`), `${result.stdout ?? ''}\n${result.stderr ?? ''}`, { mode: 0o600 });
-    assert.equal(result.status, 0, `${label} failed; private command output is not published`);
+    assert.equal(result.status, 0, `${label} failed (${classifyCommandFailure(`${result.stdout ?? ''}\n${result.stderr ?? ''}`)}); private command output is not published`);
     return result.stdout;
   };
   const requireSecret = (name) => {
@@ -87,9 +104,9 @@ function main(stage) {
     for (const [secretName, bundleId] of [['IOS_APP_PROFILE_BASE64', 'com.phrabit.app'], ['IOS_CONTROL_PROFILE_BASE64', 'com.phrabit.app.control']]) {
       const profilePath = path.join(privateRoot, `${secretName}.mobileprovision`);
       writePrivate(profilePath, Buffer.from(requireSecret(secretName), 'base64'));
-      const profileXml = run('security', ['cms', '-D', '-i', profilePath], `${secretName}-decode`);
       const xmlPath = path.join(privateRoot, `${secretName}.plist`);
-      writePrivate(xmlPath, profileXml);
+      run('security', ['cms', '-D', '-i', profilePath, '-o', xmlPath], `${secretName}-decode`);
+      const profileXml = readFileSync(xmlPath, 'utf8');
       run('plutil', ['-lint', xmlPath], `${secretName}-plist-validation`);
       const extract = (key, format) => run('plutil', ['-extract', key, format, '-o', '-', xmlPath], `${secretName}-${key.replaceAll('.', '-')}`).trim();
       const profile = {
@@ -103,7 +120,7 @@ function main(stage) {
       assert.equal(profile.Entitlements['get-task-allow'], false);
       assert.equal(profile.ProvisionedDevices, undefined);
       assert.equal(profile.ProvisionsAllDevices, undefined);
-      assert.doesNotMatch(profileXml, /<key>\s*(ProvisionedDevices|ProvisionsAllDevices)\s*<\/key>/);
+      assert.ok(!/<key>\s*(ProvisionedDevices|ProvisionsAllDevices)\s*<\/key>/.test(profileXml), 'App Store profiles must not contain device-list distribution settings');
       assert.ok(Date.parse(profile.ExpirationDate) > Date.now());
       profiles.push(profile);
       for (const folder of ['Library/MobileDevice/Provisioning Profiles', 'Library/Developer/Xcode/UserData/Provisioning Profiles']) {

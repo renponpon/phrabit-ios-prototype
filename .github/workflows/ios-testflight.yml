@@ -23,7 +23,7 @@ concurrency:
 jobs:
   distribute:
     if: ${{ github.ref == 'refs/heads/main' && inputs.confirm_internal_only }}
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 20
     environment: ios-testflight
     env:
