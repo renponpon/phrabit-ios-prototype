@@ -3,6 +3,8 @@ import SwiftUI
 
 struct CaptureView: View {
     @ObservedObject var model: CaptureViewModel
+    @ObservedObject var access: CaptureAccessController
+    @State private var showsAccess = false
     @AccessibilityFocusState private var resultFocused: Bool
     private let background = Color(red: 21 / 255, green: 28 / 255, blue: 45 / 255)
     private let surface = Color(red: 37 / 255, green: 48 / 255, blue: 72 / 255)
@@ -32,6 +34,13 @@ struct CaptureView: View {
                 .padding(.bottom, 20)
         }
         .background(background.ignoresSafeArea())
+        .sheet(isPresented: $showsAccess) { CaptureAccessView(access: access) }
+        .onChange(of: model.accessSetupRequested) { _, requested in
+            if requested { showsAccess = true; model.accessSetupRequested = false }
+        }
+        .onChange(of: access.userID) { oldUser, newUser in
+            if oldUser != nil && oldUser != newUser { model.cancel() }
+        }
         .onChange(of: model.session.state) { _, state in
             if case .result = state {
                 resultFocused = true
@@ -79,6 +88,8 @@ struct CaptureView: View {
             Text(model.isMock ? "この試作版では録音だけを行います。話した内容にかかわらず、ホテルの固定サンプルを表示します。" : "話した日本語を翻訳します。音声と認識した文章を外部AIへ送信します。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            Button(model.isMock ? "ログインと送信設定を確認（模擬）" : "ログインと送信設定") { showsAccess = true }
+                .frame(minHeight: 44)
             if model.setupComplete {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("ロック画面に追加")

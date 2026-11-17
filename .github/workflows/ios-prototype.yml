@@ -41,7 +41,18 @@ jobs:
       - name: Test public export policy
         run: node --test scripts/ios-public-export-policy.test.mjs
       - name: Test native core
-        run: swift test --package-path native/ios/PhrabitCapture/Core
+        run: |
+          swift package --package-path native/ios/PhrabitCapture/Core resolve
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const lock = JSON.parse(fs.readFileSync('native/ios/PhrabitCapture/Core/Package.resolved', 'utf8'));
+          const sdk = lock.pins.find(pin => pin.identity === 'supabase-swift');
+          assert.equal(sdk?.state.version, '2.55.7');
+          assert.equal(sdk?.state.revision, 'ed28cff9d3d246f54ebe75e52a7334e0a2f366de');
+          process.stdout.write(`PHRABIT_CORE_LOCK=${JSON.stringify(lock)}\n`);
+          NODE
+          swift test --package-path native/ios/PhrabitCapture/Core
       - name: Install project generator
         run: |
           if ! command -v xcodegen >/dev/null 2>&1; then
@@ -51,7 +62,10 @@ jobs:
           xcodebuild -version
       - name: Generate Xcode project
         working-directory: native/ios/PhrabitCapture
-        run: xcodegen generate
+        run: |
+          xcodegen generate
+          mkdir -p PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          cp Core/Package.resolved PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
       - name: Build simulator application and control without signing
         working-directory: native/ios/PhrabitCapture
         run: |
@@ -118,5 +132,17 @@ jobs:
           const archiveLog = fs.readFileSync('build/device-archive.log', 'utf8');
           assert.ok(!archiveLog.includes('All interface orientations must be supported'), 'Resolve the orientation warning before distribution');
           process.stdout.write('No interface-orientation warning in the iPhone archive build.\n');
+          NODE
+      - name: Verify Xcode uses the tested dependency revisions
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const core = JSON.parse(fs.readFileSync('Core/Package.resolved', 'utf8'));
+          const xcode = JSON.parse(fs.readFileSync('PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'utf8'));
+          const revisions = lock => lock.pins.map(pin => [pin.identity, pin.state.revision, pin.state.version]).sort((left, right) => left[0].localeCompare(right[0]));
+          assert.deepEqual(revisions(xcode), revisions(core));
+          process.stdout.write('Xcode and tested Core dependency revisions match.\n');
           NODE
 

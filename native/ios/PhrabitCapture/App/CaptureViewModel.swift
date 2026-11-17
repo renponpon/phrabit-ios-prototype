@@ -19,6 +19,9 @@ final class CaptureViewModel: ObservableObject {
     private static let setupKey = "phrabit.quickcapture.setup"
     private let recorder = AudioRecorder()
     private let processor: any CaptureProcessing
+    private let recordingAllowed: () -> Bool
+    private let authenticationRequired: () -> Void
+    @Published var accessSetupRequested = false
     @Published private(set) var recognizedText: String?
     private var uploadMayHaveStarted = false
     private var operationTask: Task<Void, Never>?
@@ -29,8 +32,10 @@ final class CaptureViewModel: ObservableObject {
         return false
     }
 
-    init(processor: (any CaptureProcessing)? = nil) {
+    init(processor: (any CaptureProcessing)? = nil, recordingAllowed: @escaping () -> Bool = { true }, authenticationRequired: @escaping () -> Void = {}) {
         self.processor = processor ?? MockCaptureProcessor()
+        self.recordingAllowed = recordingAllowed
+        self.authenticationRequired = authenticationRequired
         language = CaptureLanguage(rawValue: UserDefaults.standard.string(forKey: Self.languageKey) ?? "") ?? .chinese
         setupComplete = UserDefaults.standard.bool(forKey: Self.setupKey)
         recorder.onTimeLimit = { [weak self] in self?.stopAndTranslate() }
@@ -50,6 +55,7 @@ final class CaptureViewModel: ObservableObject {
     }
 
     func startRecording() {
+        guard recordingAllowed() else { accessSetupRequested = true; return }
         guard let identifier = session.begin(language: language) else { return }
         recognizedText = nil
         uploadMayHaveStarted = false
@@ -101,6 +107,7 @@ final class CaptureViewModel: ObservableObject {
                 self.session.complete(result, for: identifier)
             } catch is CancellationError {
             } catch {
+                if let clientError = error as? CaptureClientError, case .authenticationRequired = clientError { self.authenticationRequired(); self.accessSetupRequested = true }
                 self.session.fail((error as? CaptureClientError)?.localizedDescription ?? "処理を完了できませんでした。", for: identifier)
             }
         }
@@ -132,6 +139,7 @@ final class CaptureViewModel: ObservableObject {
                 self.session.complete(result, for: identifier)
             } catch is CancellationError {
             } catch {
+                if let clientError = error as? CaptureClientError, case .authenticationRequired = clientError { self.authenticationRequired(); self.accessSetupRequested = true }
                 self.session.fail((error as? CaptureClientError)?.localizedDescription ?? "処理を完了できませんでした。", for: identifier)
             }
         }

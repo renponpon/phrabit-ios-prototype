@@ -77,7 +77,12 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
         try Task.checkCancellation()
         guard consentGranted() else { throw CaptureClientError.unavailable }
         let token: String
-        do { token = try await accessToken() } catch is CancellationError { throw CancellationError() } catch { throw CaptureClientError.authenticationRequired }
+        do { token = try await accessToken() }
+        catch is CancellationError { throw CancellationError() }
+        catch {
+            if let error = error as? CaptureAccessError, case .connection = error { throw CaptureClientError.requestFailed }
+            throw CaptureClientError.authenticationRequired
+        }
         guard !token.isEmpty, token.count <= 8192, !token.contains(where: { $0.isWhitespace || $0.isNewline }) else { throw CaptureClientError.authenticationRequired }
         try Task.checkCancellation()
         guard consentGranted() else { throw CaptureClientError.unavailable }

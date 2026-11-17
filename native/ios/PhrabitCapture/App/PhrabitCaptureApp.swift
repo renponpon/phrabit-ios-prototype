@@ -1,13 +1,15 @@
 import SwiftUI
+import PhrabitCaptureCore
 
 @main
 struct PhrabitCaptureApp: App {
     @StateObject private var model = CaptureViewModel()
+    @StateObject private var access = CaptureAccessController.mock()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-            CaptureView(model: model)
+            CaptureView(model: model, access: access)
                 .preferredColorScheme(.dark)
                 .task {
                     if scenePhase == .active {

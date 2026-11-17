@@ -36,6 +36,10 @@ targets:
       properties:
         CFBundleDisplayName: Phrabit試作
         LSRequiresIPhoneOS: true
+        CFBundleURLTypes:
+          - CFBundleURLName: Phrabit authentication
+            CFBundleURLSchemes:
+              - com.phrabit.app
         NSMicrophoneUsageDescription: 翻訳したい一言を録音するために使用します。この試作版では音声を端末外へ送信しません。
         UILaunchScreen: {}
         UIApplicationSceneManifest:

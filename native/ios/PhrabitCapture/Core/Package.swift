@@ -7,8 +7,11 @@ let package = Package(
     products: [
         .library(name: "PhrabitCaptureCore", targets: ["PhrabitCaptureCore"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/supabase/supabase-swift.git", exact: "2.55.7")
+    ],
     targets: [
-        .target(name: "PhrabitCaptureCore"),
+        .target(name: "PhrabitCaptureCore", dependencies: [.product(name: "Auth", package: "supabase-swift")]),
         .testTarget(name: "PhrabitCaptureCoreTests", dependencies: ["PhrabitCaptureCore"])
     ]
 )

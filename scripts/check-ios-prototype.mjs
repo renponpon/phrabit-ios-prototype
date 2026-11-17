@@ -52,14 +52,39 @@ const checks = [
   }],
   ["default application remains offline; dormant client has no embedded credentials or origin", () => {
     const swiftSources = listFiles(prototypeRoot)
-      .filter((file) => file.endsWith(".swift") && !file.includes(`${path.sep}Tests${path.sep}`))
+      .filter((file) => file.endsWith(".swift") && path.basename(file) !== "Package.swift" && !file.includes(`${path.sep}Tests${path.sep}`))
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
     assert.doesNotMatch(swiftSources, /https?:\/\/|GEMINI_API_KEY|OPENAI_API_KEY|SUPABASE|import Speech|FoundationModels/);
     assert.match(read("App/CaptureViewModel.swift"), /processor \?\? MockCaptureProcessor\(\)/);
     assert.doesNotMatch(read("App/CaptureViewModel.swift") + read("App/PhrabitCaptureApp.swift"), /CaptureHTTPProcessor\(/);
+    assert.match(read("App/PhrabitCaptureApp.swift"), /CaptureAccessController\.mock\(\)/);
     assert.match(read("App/CaptureView.swift"), /模擬翻訳・音声は送信しません/);
     assert.match(read("App/CaptureView.swift"), /サンプル入力・録音内容ではありません/);
+  }],
+  ["auth uses an exact stable SDK version and keeps configuration outside the default app", () => {
+    assert.match(read("Core/Package.swift"), /exact: "2\.55\.7"/);
+    const pins = JSON.parse(read("Core/Package.resolved")).pins;
+    const sdk = pins.find((pin) => pin.identity === "supabase-swift");
+    assert.equal(sdk.state.version, "2.55.7");
+    assert.equal(sdk.state.revision, "ed28cff9d3d246f54ebe75e52a7334e0a2f366de");
+    assert.match(read("Core/Sources/PhrabitCaptureCore/CaptureSupabaseAuthentication.swift"), /flowType: \.pkce/);
+    assert.match(read("Core/Sources/PhrabitCaptureCore/CaptureSupabaseAuthentication.swift"), /autoRefreshToken: false/);
+    assert.match(read("Core/Sources/PhrabitCaptureCore/CaptureSupabaseAuthentication.swift"), /try scope\.takeRequest\(\)/);
+    assert.doesNotMatch(read("App/PhrabitCaptureApp.swift"), /CaptureLiveConnection|CaptureAuthConfiguration\(/);
+  }],
+  ["consent, keyed storage and callback guards are explicit", () => {
+    const access = read("Core/Sources/PhrabitCaptureCore/CaptureAccess.swift");
+    assert.match(access, /guard consentAccepted/);
+    assert.match(access, /generation == expectedGeneration/);
+    assert.match(access, /CaptureEnvironmentStorage/);
+    assert.match(read("App/CaptureAccessView.swift"), /OpenAI/);
+    assert.match(read("App/CaptureAccessView.swift"), /Google/);
+    assert.match(read("App/CaptureAccessView.swift"), /送信同意を取り消す/);
+    assert.match(read("App/CaptureAccessView.swift"), /模擬ログイン/);
+    assert.match(read("App/CaptureBrowserLogin.swift"), /ASWebAuthenticationSession/);
+    assert.match(read("project.yml"), /CFBundleURLSchemes:\s+- com\.phrabit\.app/);
+    assert.doesNotMatch(read("App/CaptureCredentialStore.swift"), /UserDefaults|print\(/);
   }],
   ["native networking requires consent and token and disables redirects and disk caches", () => {
     const client = read("Core/Sources/PhrabitCaptureCore/CaptureHTTPProcessor.swift");
