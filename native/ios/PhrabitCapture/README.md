@@ -25,7 +25,7 @@ iOS 18以上を対象としたSwiftUIの録音画面と、WidgetKitのロック�
 - 音声認識後は録音ファイルを削除し、翻訳だけの手動再試行を行えます。
 - 送信後の中断では、開始済みの外部処理や課金が取り消されると約束しません。
 
-`CaptureCredentialStore` は、端末内Keychainへアプリ専用のデータを保存する部品です。認証用のSupabase Swift SDKは安定版2.55.7へ厳密固定し、Auth製品だけを参照します。Package.resolvedは公開SDKの固定情報から準備したもので、Macでの依存解決・コンパイル確認が必要です。
+`CaptureCredentialStore` は、端末内Keychainへアプリ専用のデータを保存する部品です。認証用のSupabase Swift SDKは安定版2.55.7へ厳密固定し、Auth製品だけを参照します。Package.resolvedはMacのSwiftPMで解決した7件の依存を固定しています。未署名ワークフローで同じlockをXcodeへ渡し、Coreテストとアプリのビルドで依存のrevisionが一致することを検査します。
 
 `CaptureSupabaseAuthentication` は、Google OAuthのPKCEフロー、厳密なcallback URL検証、Keychain保存、期限更新へ結線します。認証リクエストは操作ごとに1回のtransport guardで制限し、SDK側の暗黙のPOST再送も外部送信前に拒否します。取り消した古い認証が、あとから新しいセッションを保存しないようにします。
 

@@ -9,8 +9,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/README.md",
-      "bytes": 5261,
-      "sha256": "53291cb37db3db709e6adf85f1f1e5c91f19699d8f5aa38e7e8c0ed33323de88"
+      "bytes": 5371,
+      "sha256": "de3b23e6e48e0627560a72fe86fcbd5936a2ea4aa5295e6d2bc78099e61eaf4c"
     },
     {
       "path": "native/ios/PhrabitCapture/project.yml",
@@ -94,8 +94,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/Core/Package.resolved",
-      "bytes": 3558,
-      "sha256": "62c18e38268d5d8d6b2dc356ec49449c505ac9fe72cc1093030285ee5e0c5e70"
+      "bytes": 2019,
+      "sha256": "79e7d3517b1059f10c551b16552d20e0612b615a936ca09dc4a41b2fa7df4a97"
     },
     {
       "path": "native/ios/PhrabitCapture/Core/Sources/PhrabitCaptureCore/CaptureAccess.swift",
@@ -179,8 +179,8 @@
     },
     {
       "path": ".github/workflows/ios-prototype.yml",
-      "bytes": 7228,
-      "sha256": "9ed8ea33d28ea3da7a44228aa57257b19035d71c4517dabdca1d8ded28cc4fe7"
+      "bytes": 7680,
+      "sha256": "272721d47bba027703141bcd8ca0fef38ef167f8e0e2a4d0a2bdd93c045c3284"
     },
     {
       "path": ".github/workflows/ios-testflight.yml",

@@ -1,21 +1,13 @@
 {
+  "originHash": "8518b32f33f08c00589d265268b2c632c89b1a9731cd17574d330815709964fb",
   "pins": [
     {
-      "identity": "cryptoswift",
+      "identity": "supabase-swift",
       "kind": "remoteSourceControl",
-      "location": "https://github.com/krzyzanowskim/CryptoSwift.git",
+      "location": "https://github.com/supabase/supabase-swift.git",
       "state": {
-        "revision": "f2a627b84c1ff96f21ac2fcb623ab36142dd5512",
-        "version": "1.10.0"
-      }
-    },
-    {
-      "identity": "mocker",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/WeTransfer/Mocker",
-      "state": {
-        "revision": "95fa785c751f6bc40c49e112d433c3acf8417a97",
-        "version": "3.0.2"
+        "revision": "ed28cff9d3d246f54ebe75e52a7334e0a2f366de",
+        "version": "2.55.7"
       }
     },
     {
@@ -55,48 +47,12 @@
       }
     },
     {
-      "identity": "swift-custom-dump",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/pointfreeco/swift-custom-dump",
-      "state": {
-        "revision": "e9c34fd54ece006b491a0e6d23fe9a6024b9a828",
-        "version": "1.7.0"
-      }
-    },
-    {
       "identity": "swift-http-types",
       "kind": "remoteSourceControl",
       "location": "https://github.com/apple/swift-http-types",
       "state": {
         "revision": "ef18d829e8b92d731ad27bb81583edd2094d1ce3",
         "version": "1.3.1"
-      }
-    },
-    {
-      "identity": "swift-secp256k1",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/21-DOT-DEV/swift-secp256k1.git",
-      "state": {
-        "revision": "e70a10e036a55fffea31568f0af92d69b6d449cd",
-        "version": "0.23.2"
-      }
-    },
-    {
-      "identity": "swift-snapshot-testing",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/pointfreeco/swift-snapshot-testing",
-      "state": {
-        "revision": "59a99c458de4d2dee580529b61b4f78dca7b7fa6",
-        "version": "1.19.4"
-      }
-    },
-    {
-      "identity": "swift-syntax",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/swiftlang/swift-syntax",
-      "state": {
-        "revision": "0687f71944021d616d34d922343dcef086855920",
-        "version": "600.0.1"
       }
     },
     {
@@ -107,16 +63,7 @@
         "revision": "8f6abcf4c8950e2679d5b2fee4ca284fd7c34886",
         "version": "1.11.0"
       }
-    },
-    {
-      "identity": "supabase-swift",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/supabase/supabase-swift.git",
-      "state": {
-        "revision": "ed28cff9d3d246f54ebe75e52a7334e0a2f366de",
-        "version": "2.55.7"
-      }
     }
   ],
-  "version": 2
+  "version": 3
 }

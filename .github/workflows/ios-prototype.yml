@@ -46,7 +46,11 @@ jobs:
           node <<'NODE'
           const assert = require('node:assert/strict');
           const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
           const lock = JSON.parse(fs.readFileSync('native/ios/PhrabitCapture/Core/Package.resolved', 'utf8'));
+          const checkedIn = JSON.parse(execFileSync('git', ['show', 'HEAD:native/ios/PhrabitCapture/Core/Package.resolved'], { encoding: 'utf8' }));
+          const revisions = value => value.pins.map(pin => [pin.identity, pin.state.revision, pin.state.version]).sort((left, right) => left[0].localeCompare(right[0]));
+          assert.deepEqual(revisions(lock), revisions(checkedIn));
           const sdk = lock.pins.find(pin => pin.identity === 'supabase-swift');
           assert.equal(sdk?.state.version, '2.55.7');
           assert.equal(sdk?.state.revision, 'ed28cff9d3d246f54ebe75e52a7334e0a2f366de');
