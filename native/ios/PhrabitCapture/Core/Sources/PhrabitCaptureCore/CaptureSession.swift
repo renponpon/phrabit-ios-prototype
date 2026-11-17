@@ -31,6 +31,7 @@ public struct CaptureSession: Sendable {
         case idle
         case preparing
         case recording
+        case recognizing
         case translating
         case result(CaptureTranslation)
         case failed(String)
@@ -45,7 +46,7 @@ public struct CaptureSession: Sendable {
 
     public var isBusy: Bool {
         switch state {
-        case .preparing, .recording, .translating: return true
+        case .preparing, .recording, .recognizing, .translating: return true
         case .idle, .result, .failed: return false
         }
     }
@@ -66,6 +67,26 @@ public struct CaptureSession: Sendable {
 
     public mutating func beginTranslation() -> UUID? {
         guard state == .recording, let identifier = operationID else { return nil }
+        state = .translating
+        return identifier
+    }
+
+    public mutating func beginRecognition() -> UUID? {
+        guard state == .recording, let identifier = operationID else { return nil }
+        state = .recognizing
+        return identifier
+    }
+
+    public mutating func recognitionCompleted(for identifier: UUID) -> Bool {
+        guard state == .recognizing, operationID == identifier else { return false }
+        state = .translating
+        return true
+    }
+
+    public mutating func retryTranslation() -> UUID? {
+        guard case .failed = state else { return nil }
+        let identifier = UUID()
+        operationID = identifier
         state = .translating
         return identifier
     }

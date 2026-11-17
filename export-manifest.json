@@ -9,8 +9,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/README.md",
-      "bytes": 14831,
-      "sha256": "f257338e677bde02e1a3bf790686a4e89a0e72b1bbe27b9b658e2a530cecf166"
+      "bytes": 4011,
+      "sha256": "10cfc9008821d54b3fcf4406d82e14bad8446a5dca4fcae0947821bd05d56c4d"
     },
     {
       "path": "native/ios/PhrabitCapture/project.yml",
@@ -34,18 +34,23 @@
     },
     {
       "path": "native/ios/PhrabitCapture/App/AudioRecorder.swift",
-      "bytes": 6160,
-      "sha256": "78cb502570085dcd23fce35c69609d35c5c62d30b68bdd5e1c223108a3ba0f53"
+      "bytes": 6287,
+      "sha256": "e4c123f7eae96c740eaeb7a15847f950a4247b1bff47d2f64dbc3a4e7286f444"
     },
     {
       "path": "native/ios/PhrabitCapture/App/CaptureView.swift",
-      "bytes": 8938,
-      "sha256": "413088a1f63ac558ca056811097dc63c3c16943861506f772b35a9027a69d513"
+      "bytes": 9737,
+      "sha256": "aeb86df43b5e4c72f9c7cbe0385530b672c6d5a15841f0544cb3fa4edd9ad673"
     },
     {
       "path": "native/ios/PhrabitCapture/App/CaptureViewModel.swift",
-      "bytes": 3893,
-      "sha256": "e4fe47344e6aebf9ee5e1b837901356fdd4e251b18eb23db423da3ce51976a74"
+      "bytes": 6695,
+      "sha256": "4b890a8c2ae967fea574efeb056d15c2a5062bc65d9ca1c2d0134f149eae0494"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/App/CaptureCredentialStore.swift",
+      "bytes": 1984,
+      "sha256": "abe8ccb7689dc1c2ea9211db0da4a2bf8833491ee92c57cc713e7a7708469662"
     },
     {
       "path": "native/ios/PhrabitCapture/App/PhrabitCaptureApp.swift",
@@ -74,8 +79,18 @@
     },
     {
       "path": "native/ios/PhrabitCapture/Core/Sources/PhrabitCaptureCore/CaptureSession.swift",
-      "bytes": 2630,
-      "sha256": "56a4f0def35daa3e255c81928b58a6320aa3c9f1f927ad9cc9802493f624d2c4"
+      "bytes": 3326,
+      "sha256": "96ed3f9b951a5f90d767f5382ee00b66abc10ce2612bddb134aaf2ff384699b7"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Core/Sources/PhrabitCaptureCore/CaptureProcessor.swift",
+      "bytes": 2046,
+      "sha256": "6a8fc457ff535673d4cdb6d225deefed081a5e1f510e4b8f97383d19851af382"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Core/Sources/PhrabitCaptureCore/CaptureHTTPProcessor.swift",
+      "bytes": 7950,
+      "sha256": "f2bd03599b91035694b501cebc57a3e22724d0f26491d80c26e58de1a5f50930"
     },
     {
       "path": "native/ios/PhrabitCapture/Core/Sources/PhrabitCaptureCore/MockTranslator.swift",
@@ -84,8 +99,13 @@
     },
     {
       "path": "native/ios/PhrabitCapture/Core/Tests/PhrabitCaptureCoreTests/CaptureSessionTests.swift",
-      "bytes": 4406,
-      "sha256": "2d83ebedd1f1c88652c9d033d122e994de65a9b428ce12141b73358443ac054d"
+      "bytes": 5336,
+      "sha256": "683547f0c7b41088e6718abcd1e6a0526813d1ca8550bff838ddb8162858f184"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/Core/Tests/PhrabitCaptureCoreTests/CaptureHTTPProcessorTests.swift",
+      "bytes": 8160,
+      "sha256": "e650e403af869160ace43b591f92e22dad5481470cc1f17e6e9922008452d15b"
     },
     {
       "path": "native/ios/PhrabitCapture/Shared/CaptureLaunchRequest.swift",
@@ -124,13 +144,13 @@
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 7869,
-      "sha256": "4cf287ecb8a8a991453c16c0c66d89eb53977c8735d38ac56fda8bf7e4d14405"
+      "bytes": 8868,
+      "sha256": "3839e35082fe401b114f0b4e76640bc0dabdce089f138cf851dbfa9c4c40332a"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
-      "bytes": 4622,
-      "sha256": "18475208346319a2ad3853204fd51ca7ca3e9d13e8e158c4ddb274f1ed18e6be"
+      "bytes": 4856,
+      "sha256": "e8e543d3fd64a3872734200038dfe5485430a458ec8dcf6e41cb8ee87f882dac"
     },
     {
       "path": "scripts/ios-public-export-policy.mjs",
@@ -144,13 +164,13 @@
     },
     {
       "path": "scripts/ios-testflight.mjs",
-      "bytes": 14929,
-      "sha256": "2678cfda96724f3ca06cc4e292dcbe0692e756d821bca71ea940d8cef53e2f8e"
+      "bytes": 15521,
+      "sha256": "bfa45b8f29b1b82b10a0224787c5ef86e0d3f6b2428ad4cddc9f0fbd60ea552f"
     },
     {
       "path": "scripts/ios-testflight.test.mjs",
-      "bytes": 3819,
-      "sha256": "e8ee59b27796d6e1157ceb8ab04ceeddb459f49f0b0eb13441ab71fe4201e189"
+      "bytes": 4545,
+      "sha256": "64dc38e13a1a34cf2428a1707449c09a8c90589d4d0de0428b23c7bae247d4d7"
     },
     {
       "path": "public/icons/icon-512.png",

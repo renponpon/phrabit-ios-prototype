@@ -50,15 +50,27 @@ const checks = [
     ]);
     assert.doesNotMatch(project, /UIRequiresFullScreen/);
   }],
-  ["prototype cannot invoke translation or transcription APIs", () => {
+  ["default application remains offline; dormant client has no embedded credentials or origin", () => {
     const swiftSources = listFiles(prototypeRoot)
-      .filter((file) => file.endsWith(".swift"))
+      .filter((file) => file.endsWith(".swift") && !file.includes(`${path.sep}Tests${path.sep}`))
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
-    assert.doesNotMatch(swiftSources, /URLSession|https?:\/\/|GEMINI_API_KEY|OPENAI_API_KEY|SUPABASE|import Speech|FoundationModels/);
-    assert.match(read("App/CaptureViewModel.swift"), /MockTranslator\(\)/);
+    assert.doesNotMatch(swiftSources, /https?:\/\/|GEMINI_API_KEY|OPENAI_API_KEY|SUPABASE|import Speech|FoundationModels/);
+    assert.match(read("App/CaptureViewModel.swift"), /processor \?\? MockCaptureProcessor\(\)/);
+    assert.doesNotMatch(read("App/CaptureViewModel.swift") + read("App/PhrabitCaptureApp.swift"), /CaptureHTTPProcessor\(/);
     assert.match(read("App/CaptureView.swift"), /模擬翻訳・音声は送信しません/);
     assert.match(read("App/CaptureView.swift"), /サンプル入力・録音内容ではありません/);
+  }],
+  ["native networking requires consent and token and disables redirects and disk caches", () => {
+    const client = read("Core/Sources/PhrabitCaptureCore/CaptureHTTPProcessor.swift");
+    assert.match(client, /URLSessionConfiguration\.ephemeral/);
+    assert.match(client, /configuration\.urlCache = nil/);
+    assert.match(client, /completionHandler\(nil\)/);
+    assert.match(client, /guard consentGranted\(\)/);
+    assert.match(client, /Task\.checkCancellation/);
+    assert.match(read("App/CaptureCredentialStore.swift"), /kSecAttrAccessibleWhenUnlockedThisDeviceOnly/);
+    assert.doesNotMatch(read("App/CaptureCredentialStore.swift"), /UserDefaults|print\(/);
+    assert.match(read("Core/Tests/PhrabitCaptureCoreTests/CaptureHTTPProcessorTests.swift"), /URLProtocol/);
   }],
   ["recording capped, permission requested, files protected and discarded", () => {
     assert.match(read("Core/Sources/PhrabitCaptureCore/CaptureSession.swift"), /maximumRecordingDuration: TimeInterval = 20/);

@@ -27,6 +27,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
     private var recorder: AVAudioRecorder?
     private var recordingURL: URL?
     private var startedAtUptime: TimeInterval?
+    private(set) var completedDurationMilliseconds = 0
     private var interruptionObserver: NSObjectProtocol?
 
     override init() {
@@ -107,6 +108,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         }
         let elapsed = startedAtUptime.map { max(0, ProcessInfo.processInfo.systemUptime - $0) } ?? 0
         let duration = max(audioRecorder.currentTime, elapsed)
+        completedDurationMilliseconds = Int(min(21.5, duration) * 1000)
         audioRecorder.delegate = nil
         audioRecorder.stop()
         recorder = nil

@@ -98,5 +98,23 @@ final class CaptureSessionTests: XCTestCase {
             XCTFail("予期しないエラーです: \(error)")
         }
     }
+
+    func testRecognitionAndRetryIgnoreStaleResults() throws {
+        var session = CaptureSession()
+        let identifier = try XCTUnwrap(session.begin(language: .chinese))
+        session.recordingBegan(for: identifier)
+        XCTAssertEqual(session.beginRecognition(), identifier)
+        XCTAssertTrue(session.isBusy)
+        XCTAssertNil(session.beginRecognition())
+        XCTAssertFalse(session.recognitionCompleted(for: UUID()))
+        XCTAssertTrue(session.recognitionCompleted(for: identifier))
+        session.fail("翻訳失敗", for: identifier)
+        let retryID = try XCTUnwrap(session.retryTranslation())
+        session.complete(MockTranslator.sample(for: .chinese), for: identifier)
+        XCTAssertEqual(session.state, .translating)
+        session.complete(MockTranslator.sample(for: .chinese), for: retryID)
+        XCTAssertFalse(session.isBusy)
+        XCTAssertNil(session.retryTranslation())
+    }
 }
 
