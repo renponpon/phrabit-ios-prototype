@@ -128,7 +128,7 @@ const checks = [
     assert.match(fixtures, /reading: nil/);
     assert.match(fixtures, /reading: "Kěyǐ/);
   }],
-  ["signed preview auth variant cannot record, translate or call application APIs", () => {
+  ["signed preview auth variant can only check the account or the bounded diagnostic API", () => {
     const app = read("App/PhrabitCaptureApp.swift");
     const preview = read("App/CapturePreviewAuthView.swift");
     const verifier = read("Core/Sources/PhrabitCaptureCore/CaptureConnectionVerifier.swift");
@@ -138,11 +138,14 @@ const checks = [
     assert.match(preview, /mode = \.offline/);
     assert.match(preview, /CaptureConnectionVerifier\(previewAuth:/);
     assert.match(verifier, /auth\/v1\/user/);
+    assert.match(verifier, /functions\/v1\/phrabit-capture-check/);
+    assert.match(verifier, /capture-edge-v1/);
     assert.doesNotMatch(preview, /AudioRecorder|CaptureViewModel|CaptureLiveConnection|CaptureHTTPProcessor|\/api\/capture/);
     assert.doesNotMatch(read("project.yml"), /PhrabitPreviewAuthOnly/);
     assert.match(distribution, /Approved isolated Preview project only/);
     assert.match(distribution, /testFlightInternalTestingOnly = true/);
     assert.match(workflow, /preview_auth_only:[\s\S]*?default: false/);
+    assert.match(workflow, /preview_capture_check:[\s\S]*?default: false/);
   }],
   ["Phrabit custom symbol asset referenced by the control", () => {
     const asset = JSON.parse(read("Shared/Assets.xcassets/PhrabitControl.symbolset/Contents.json"));

@@ -19,10 +19,13 @@ public enum CaptureConnectionCheckError: LocalizedError {
 
 @MainActor
 public final class CaptureConnectionVerifier {
+    public enum PreviewTarget { case account, captureEdge }
+
     private let endpoint: URL
     private let session: URLSession
     private let access: CaptureAccessController
     private let previewAuthKey: String?
+    private let responseContract: String?
 
     public init(origin: URL, access: CaptureAccessController, protocolClasses: [AnyClass]? = nil) throws {
         guard origin.scheme == "https", origin.host != nil, origin.user == nil, origin.password == nil,
@@ -31,14 +34,22 @@ public final class CaptureConnectionVerifier {
         self.access = access
         self.session = CaptureHTTPProcessor.makeSession(protocolClasses: protocolClasses, timeout: 10)
         self.previewAuthKey = nil
+        self.responseContract = "capture-access-v1"
     }
 
-    public init(previewAuth configuration: CaptureAuthConfiguration, access: CaptureAccessController, protocolClasses: [AnyClass]? = nil) throws {
+    public init(previewAuth configuration: CaptureAuthConfiguration, target: PreviewTarget = .account, access: CaptureAccessController, protocolClasses: [AnyClass]? = nil) throws {
         let project = configuration.projectURL
         guard project == configuration.apiOrigin, project.port == nil,
               project.host?.range(of: #"^[a-z]{20}\.supabase\.co$"#, options: .regularExpression) != nil,
               configuration.publishableKey.hasPrefix("sb_publishable_") else { throw CaptureClientError.invalidConfiguration }
-        self.endpoint = project.appendingPathComponent("auth/v1/user")
+        switch target {
+        case .account:
+            self.endpoint = project.appendingPathComponent("auth/v1/user")
+            self.responseContract = nil
+        case .captureEdge:
+            self.endpoint = project.appendingPathComponent("functions/v1/phrabit-capture-check")
+            self.responseContract = "capture-edge-v1"
+        }
         self.access = access
         self.session = CaptureHTTPProcessor.makeSession(protocolClasses: protocolClasses, timeout: 10)
         self.previewAuthKey = configuration.publishableKey
@@ -70,7 +81,7 @@ public final class CaptureConnectionVerifier {
             guard access.canRecord, access.sessionRevision == revision else { throw CancellationError() }
             guard let response = response as? HTTPURLResponse, response.url == endpoint else { throw CaptureConnectionCheckError.invalidResponse }
             if (300...399).contains(response.statusCode) { throw CaptureConnectionCheckError.deploymentProtected }
-            if previewAuthKey != nil {
+            guard let responseContract else {
                 try Self.validatePreviewAuth(data: data, response: response, expectedUser: expectedUser)
                 return
             }
@@ -83,7 +94,7 @@ public final class CaptureConnectionVerifier {
             switch response.statusCode {
             case 200:
                 guard Set(payload.keys) == Set(["requestId", "status", "environment", "contract"]), payload["status"] == "ready",
-                      payload["environment"] == "preview", payload["contract"] == "capture-access-v1" else { throw CaptureConnectionCheckError.invalidResponse }
+                      payload["environment"] == "preview", payload["contract"] == responseContract else { throw CaptureConnectionCheckError.invalidResponse }
             case 401:
                 guard payload["code"] == "capture_auth_required" else { throw CaptureConnectionCheckError.deploymentProtected }
                 throw CaptureConnectionCheckError.signInRequired

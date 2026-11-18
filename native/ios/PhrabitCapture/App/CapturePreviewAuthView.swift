@@ -6,7 +6,7 @@ import SwiftUI
 final class CapturePreviewAuthLaunch: ObservableObject {
     enum Mode {
         case offline, invalid
-        case preview(CaptureAccessController, CaptureConnectionDiagnostics)
+        case preview(CaptureAccessController, CaptureConnectionDiagnostics, usesCaptureEdge: Bool)
     }
 
     let mode: Mode
@@ -16,9 +16,15 @@ final class CapturePreviewAuthLaunch: ObservableObject {
             mode = .offline
             return
         }
-        guard let settings = values as? [String: String], settings.count == 2,
+        guard let settings = values as? [String: String],
               let reference = settings["ProjectRef"], reference.range(of: #"^[a-z]{20}$"#, options: .regularExpression) != nil,
               let key = settings["PublishableKey"], key.hasPrefix("sb_publishable_") else {
+            mode = .invalid
+            return
+        }
+        let usesCaptureEdge = settings["ConnectionCheck"] == "capture-edge-v1"
+        let expectedKeys: Set<String> = usesCaptureEdge ? ["ProjectRef", "PublishableKey", "ConnectionCheck"] : ["ProjectRef", "PublishableKey"]
+        guard Set(settings.keys) == expectedKeys else {
             mode = .invalid
             return
         }
@@ -34,17 +40,18 @@ final class CapturePreviewAuthLaunch: ObservableObject {
         let browser = CaptureBrowserLogin()
         let backend = CaptureSupabaseAuthentication(configuration: configuration, storage: storage, openBrowser: { try await browser.open($0) })
         let access = CaptureAccessController(backend: backend, storage: storage, environmentID: configuration.environmentID)
-        guard let verifier = try? CaptureConnectionVerifier(previewAuth: configuration, access: access) else {
+        guard let verifier = try? CaptureConnectionVerifier(previewAuth: configuration, target: usesCaptureEdge ? .captureEdge : .account, access: access) else {
             mode = .invalid
             return
         }
-        mode = .preview(access, CaptureConnectionDiagnostics(access: access, check: { try await verifier.verify() }))
+        mode = .preview(access, CaptureConnectionDiagnostics(access: access, check: { try await verifier.verify() }), usesCaptureEdge: usesCaptureEdge)
     }
 }
 
 struct CapturePreviewAuthView: View {
     @ObservedObject var access: CaptureAccessController
     let diagnostics: CaptureConnectionDiagnostics
+    let usesCaptureEdge: Bool
     @State private var acknowledged = false
 
     var body: some View {
@@ -74,7 +81,7 @@ struct CapturePreviewAuthView: View {
                     }
                     if case .failed(let message) = access.state { Text(message).foregroundStyle(.red) }
                 }
-                CaptureConnectionDiagnosticsView(diagnostics: diagnostics, canCheck: access.canRecord, previewOnly: true)
+                CaptureConnectionDiagnosticsView(diagnostics: diagnostics, canCheck: access.canRecord, previewOnly: true, previewCaptureEdge: usesCaptureEdge)
             }
             .navigationTitle("Phrabit 接続確認")
             .onChange(of: access.sessionRevision) { _, _ in diagnostics.cancel() }

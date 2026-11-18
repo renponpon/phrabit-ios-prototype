@@ -17,8 +17,8 @@ struct PhrabitCaptureApp: App {
             case .invalid:
                 ContentUnavailableView("接続設定を確認できません", systemImage: "exclamationmark.triangle",
                                        description: Text("この検証版では録音や翻訳を行いません。"))
-            case .preview(let previewAccess, let diagnostics):
-                CapturePreviewAuthView(access: previewAccess, diagnostics: diagnostics)
+            case .preview(let previewAccess, let diagnostics, let usesCaptureEdge):
+                CapturePreviewAuthView(access: previewAccess, diagnostics: diagnostics, usesCaptureEdge: usesCaptureEdge)
                     .preferredColorScheme(.dark)
             }
         }

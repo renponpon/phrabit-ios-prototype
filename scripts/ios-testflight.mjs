@@ -18,13 +18,16 @@ export function validateExecution(environment) {
 }
 
 export function previewAuthSettings(environment) {
+  const captureCheck = environment.IOS_PREVIEW_CAPTURE_CHECK ?? 'false';
+  assert.ok(captureCheck === 'false' || captureCheck === 'true', 'Invalid capture check mode');
+  if (captureCheck === 'true') assert.equal(environment.IOS_PREVIEW_AUTH_ONLY, 'true', 'Capture check requires Preview auth-only mode');
   if (!environment.IOS_PREVIEW_AUTH_ONLY || environment.IOS_PREVIEW_AUTH_ONLY === 'false') return undefined;
   assert.equal(environment.IOS_PREVIEW_AUTH_ONLY, 'true', 'Invalid preview mode');
   const reference = environment.IOS_PREVIEW_PROJECT_REF ?? '';
   const publishableKey = environment.IOS_PREVIEW_PUBLISHABLE_KEY ?? '';
   assert.ok(/^[a-z]{20}$/.test(reference) && createHash('sha256').update(reference).digest('hex') === approvedPreviewProjectDigest, 'Approved isolated Preview project only');
   assert.ok(/^sb_publishable_[A-Za-z0-9_-]{20,150}$/.test(publishableKey), 'A modern publishable key is required; secret and service-role keys are not accepted');
-  return { ProjectRef: reference, PublishableKey: publishableKey };
+  return { ProjectRef: reference, PublishableKey: publishableKey, ...(captureCheck === 'true' ? { ConnectionCheck: 'capture-edge-v1' } : {}) };
 }
 
 export function previewAuthPrivacyCategories() {
@@ -231,7 +234,8 @@ function main(stage) {
     if (state.previewAuthOnly) {
       const settings = JSON.parse(readFileSync(path.join(prototype, 'distribution.json'), 'utf8')).targets.PhrabitCapture.info.properties.PhrabitPreviewAuthOnly;
       const bundled = JSON.parse(run('plutil', ['-extract', 'PhrabitPreviewAuthOnly', 'json', '-o', '-', path.join(appPath, 'Info.plist')], 'preview-auth-bundle'));
-      assert.ok(bundled.ProjectRef === settings.ProjectRef && bundled.PublishableKey === settings.PublishableKey, 'Preview bundle configuration mismatch');
+      assert.ok(bundled.ProjectRef === settings.ProjectRef && bundled.PublishableKey === settings.PublishableKey &&
+        bundled.ConnectionCheck === settings.ConnectionCheck && Object.keys(bundled).length === Object.keys(settings).length, 'Preview bundle configuration mismatch');
       const extensionInfo = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(controlPath, 'Info.plist')], 'control-info'));
       assert.ok(!('PhrabitPreviewAuthOnly' in extensionInfo), 'Preview configuration must be app-only');
       const bundledPrivacy = JSON.parse(run('plutil', ['-extract', 'NSPrivacyCollectedDataTypes', 'json', '-o', '-', path.join(appPath, 'PrivacyInfo.xcprivacy')], 'preview-auth-bundled-privacy'));

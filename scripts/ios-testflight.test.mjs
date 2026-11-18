@@ -85,6 +85,12 @@ test('preview auth remains off by default and rejects incomplete or unrelated co
   }), /Approved isolated Preview project only/);
 });
 
+test('capture check is opt-in and cannot be signed outside Preview auth-only mode', () => {
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_CAPTURE_CHECK: 'true' }), /requires Preview auth-only mode/);
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_AUTH_ONLY: 'false', IOS_PREVIEW_CAPTURE_CHECK: 'true' }), /requires Preview auth-only mode/);
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_CAPTURE_CHECK: 'yes' }), /Invalid capture check mode/);
+});
+
 test('only the application gets auth configuration and a no-microphone description', () => {
   const settings = { ProjectRef: 'abcdefghijklmnopqrst', PublishableKey: 'sb_publishable_synthetic_example_key' };
   const spec = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', settings);
@@ -92,6 +98,10 @@ test('only the application gets auth configuration and a no-microphone descripti
   assert.match(spec.targets.PhrabitCapture.info.properties.NSMicrophoneUsageDescription, /使用しません/);
   assert.equal(spec.targets.PhrabitCaptureControl.info.properties.PhrabitPreviewAuthOnly, undefined);
   assert.equal(distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1').targets.PhrabitCapture.info.properties.PhrabitPreviewAuthOnly, undefined);
+  const captureSettings = { ...settings, ConnectionCheck: 'capture-edge-v1' };
+  const captureSpec = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', captureSettings);
+  assert.deepEqual(captureSpec.targets.PhrabitCapture.info.properties.PhrabitPreviewAuthOnly, captureSettings);
+  assert.equal(captureSpec.targets.PhrabitCaptureControl.info.properties.PhrabitPreviewAuthOnly, undefined);
 });
 
 test('auth-only manifest declares linked account fields, not tracking or audio', () => {

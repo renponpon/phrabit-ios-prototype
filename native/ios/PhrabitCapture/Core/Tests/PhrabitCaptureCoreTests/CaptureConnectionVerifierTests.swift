@@ -168,6 +168,39 @@ final class CaptureConnectionVerifierTests: XCTestCase {
         XCTAssertTrue(access.canRecord)
     }
 
+    func testPreviewEdgeMakesOnePayloadFreeGetToTheSameProject() async throws {
+        let access = signedIn()
+        let configuration = try previewConfiguration()
+        var requests = 0
+        ConnectionCheckStub.handler = { request in
+            requests += 1
+            XCTAssertEqual(request.url, configuration.projectURL.appendingPathComponent("functions/v1/phrabit-capture-check"))
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-check")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "apikey"), configuration.publishableKey)
+            XCTAssertNil(request.httpBody)
+            XCTAssertNil(request.httpBodyStream)
+            XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+            return (200, "application/json", try Self.success(changes: ["contract": "capture-edge-v1"]), nil)
+        }
+        let client = try CaptureConnectionVerifier(previewAuth: configuration, target: .captureEdge, access: access, protocolClasses: [ConnectionCheckStub.self])
+        try await client.verify()
+        XCTAssertEqual(requests, 1)
+    }
+
+    func testPreviewEdgeDoesNotAcceptAnAuthOrVercelResponseAsProof() async throws {
+        let access = signedIn()
+        let owner = try XCTUnwrap(access.userID)
+        let client = try CaptureConnectionVerifier(previewAuth: previewConfiguration(), target: .captureEdge, access: access, protocolClasses: [ConnectionCheckStub.self])
+        let account = ["id": owner.uuidString, "role": "authenticated"]
+        for data in [try JSONSerialization.data(withJSONObject: account), try Self.success()] {
+            ConnectionCheckStub.handler = { _ in (200, "application/json", data, nil) }
+            do { try await client.verify(); XCTFail("別のAPIを検証用APIとして受け付けました") }
+            catch let failure as CaptureConnectionCheckError { if case .invalidResponse = failure {} else { XCTFail("誤ったエラー") } }
+        }
+        XCTAssertTrue(access.canRecord)
+    }
+
     func testPreviewAuthRejectsNonSupabaseHostOrDifferentOrigin() throws {
         let access = signedIn()
         let home = try previewConfiguration()

@@ -83,6 +83,7 @@ struct CaptureConnectionDiagnosticsView: View {
     @ObservedObject var diagnostics: CaptureConnectionDiagnostics
     let canCheck: Bool
     var previewOnly = false
+    var previewCaptureEdge = false
 
     var body: some View {
         Section {
@@ -91,7 +92,7 @@ struct CaptureConnectionDiagnosticsView: View {
                 ProgressView("接続を確認中")
                 Button("確認を中止", action: diagnostics.cancel)
             case .ready:
-                Label("接続確認OK（音声未送信）", systemImage: "checkmark.circle")
+                Label(previewCaptureEdge ? "検証用APIに接続できました（音声未送信）" : "接続確認OK（音声未送信）", systemImage: "checkmark.circle")
             case .failed(let message):
                 Text(message).foregroundStyle(.red)
             case .idle:
@@ -99,7 +100,7 @@ struct CaptureConnectionDiagnosticsView: View {
             }
             Button("接続を確認（音声を送らない）", action: diagnostics.run)
                 .disabled(!canCheck || diagnostics.isBusy)
-            Text(previewOnly ? "Previewの認証サーバーに接続し、ログイン中のアカウントか確認します。音声・翻訳・学習データは送りません。" : "認証だけを確認します。録音・翻訳・フレーズ保存・学習日の記録は行いません。録音開始前に自動実行しません。")
+            Text(previewCaptureEdge ? "ログインした本人が検証用APIに接続できるか確認します。音声・翻訳・学習データは送りません。" : previewOnly ? "Previewの認証サーバーに接続し、ログイン中のアカウントか確認します。音声・翻訳・学習データは送りません。" : "認証だけを確認します。録音・翻訳・フレーズ保存・学習日の記録は行いません。録音開始前に自動実行しません。")
                 .font(.footnote)
         } header: { Text("接続確認") }
     }
