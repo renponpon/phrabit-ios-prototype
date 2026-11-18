@@ -4,28 +4,28 @@ import PhrabitCaptureCore
 @main
 @MainActor
 struct PhrabitCaptureApp: App {
-    @StateObject private var model = CaptureViewModel()
-    @StateObject private var access = CaptureAccessController.mock()
     @StateObject private var preview = CapturePreviewAuthLaunch()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             switch preview.mode {
-            case .offline:
-                offlineView
+            case .offline(let model, let access):
+                recordingView(model: model, access: access)
             case .invalid:
                 ContentUnavailableView("接続設定を確認できません", systemImage: "exclamationmark.triangle",
                                        description: Text("この検証版では録音や翻訳を行いません。"))
             case .preview(let previewAccess, let diagnostics, let usesCaptureEdge):
                 CapturePreviewAuthView(access: previewAccess, diagnostics: diagnostics, usesCaptureEdge: usesCaptureEdge)
                     .preferredColorScheme(.dark)
+            case .localRecording(let model, let access, let diagnostics):
+                recordingView(model: model, access: access, diagnostics: diagnostics, localPreview: true)
             }
         }
     }
 
-    private var offlineView: some View {
-        CaptureView(model: model, access: access)
+    private func recordingView(model: CaptureViewModel, access: CaptureAccessController, diagnostics: CaptureConnectionDiagnostics? = nil, localPreview: Bool = false) -> some View {
+        CaptureView(model: model, access: access, diagnostics: diagnostics, localPreview: localPreview)
             .preferredColorScheme(.dark)
             .task {
                 if scenePhase == .active {

@@ -60,13 +60,24 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         }
     }
 
-    func start() async throws {
-        let permitted = await withCheckedContinuation { continuation in
-            AVAudioApplication.requestRecordPermission { granted in
-                continuation.resume(returning: granted)
+    func start(authorized: () -> Bool) async throws {
+        let permitted: Bool
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            permitted = true
+        case .undetermined:
+            permitted = await withCheckedContinuation { continuation in
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
             }
+        case .denied:
+            permitted = false
+        @unknown default:
+            permitted = false
         }
         try Task.checkCancellation()
+        guard authorized() else { throw CaptureAccessError.authentication }
         guard permitted else { throw RecordingError.permissionDenied }
 
         let audioSession = AVAudioSession.sharedInstance()

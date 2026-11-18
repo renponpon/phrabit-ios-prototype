@@ -49,6 +49,7 @@ final class CaptureViewModel: ObservableObject {
 
     func handlePendingLaunch() {
         guard CaptureLaunchRequest.consume(), !session.isBusy else { return }
+        guard recordingAllowed() else { accessSetupRequested = true; return }
         if setupComplete {
             startRecording()
         }
@@ -62,7 +63,7 @@ final class CaptureViewModel: ObservableObject {
         operationTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.recorder.start()
+                try await self.recorder.start(authorized: self.recordingAllowed)
                 guard self.session.operationID == identifier else { return }
                 self.setupComplete = true
                 UserDefaults.standard.set(true, forKey: Self.setupKey)
@@ -71,12 +72,14 @@ final class CaptureViewModel: ObservableObject {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             } catch is CancellationError {
             } catch {
+                if !self.recordingAllowed() { self.accessSetupRequested = true }
                 self.session.fail(error.localizedDescription, for: identifier)
             }
         }
     }
 
     func stopAndTranslate() {
+        guard recordingAllowed() else { cancel(); accessSetupRequested = true; return }
         guard let identifier = session.beginRecognition() else { return }
         recordingStartedAt = nil
         let recordingURL: URL
@@ -92,7 +95,13 @@ final class CaptureViewModel: ObservableObject {
             guard let self else { return }
             defer { self.recorder.discard(recordingURL) }
             do {
-                let audio = try Data(contentsOf: recordingURL)
+                let audio: Data
+                if self.processor.sendsAudio {
+                    audio = try Data(contentsOf: recordingURL)
+                } else {
+                    self.recorder.discard(recordingURL)
+                    audio = Data()
+                }
                 try Task.checkCancellation()
                 self.uploadMayHaveStarted = self.processor.sendsAudio
                 let text = try await self.processor.transcribe(audio: audio, durationMilliseconds: duration, sessionID: identifier)
@@ -104,6 +113,7 @@ final class CaptureViewModel: ObservableObject {
                 guard self.session.recognitionCompleted(for: identifier) else { return }
                 let result = try await self.processor.translate(text: text, to: targetLanguage, sessionID: identifier)
                 try Task.checkCancellation()
+                guard self.recordingAllowed() else { self.cancel(); return }
                 self.session.complete(result, for: identifier)
             } catch is CancellationError {
             } catch {

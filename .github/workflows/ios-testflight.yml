@@ -22,6 +22,11 @@ on:
         type: boolean
         required: true
         default: false
+      preview_mock_recording:
+        description: 端末内だけで録音し固定訳文を表示（両方のPreview設定必須）
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -62,6 +67,7 @@ jobs:
         env:
           IOS_PREVIEW_AUTH_ONLY: ${{ inputs.preview_auth_only }}
           IOS_PREVIEW_CAPTURE_CHECK: ${{ inputs.preview_capture_check }}
+          IOS_PREVIEW_MOCK_RECORDING: ${{ inputs.preview_mock_recording }}
           IOS_PREVIEW_PROJECT_REF: ${{ secrets.IOS_PREVIEW_PROJECT_REF }}
           IOS_PREVIEW_PUBLISHABLE_KEY: ${{ secrets.IOS_PREVIEW_PUBLISHABLE_KEY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

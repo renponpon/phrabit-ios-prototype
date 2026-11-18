@@ -5,6 +5,7 @@ struct CaptureView: View {
     @ObservedObject var model: CaptureViewModel
     @ObservedObject var access: CaptureAccessController
     var diagnostics: CaptureConnectionDiagnostics? = nil
+    var localPreview = false
     @State private var showsAccess = false
     @AccessibilityFocusState private var resultFocused: Bool
     private let background = Color(red: 21 / 255, green: 28 / 255, blue: 45 / 255)
@@ -35,7 +36,13 @@ struct CaptureView: View {
                 .padding(.bottom, 20)
         }
         .background(background.ignoresSafeArea())
-        .sheet(isPresented: $showsAccess) { CaptureAccessView(access: access, diagnostics: diagnostics) }
+        .sheet(isPresented: $showsAccess) {
+            if localPreview, let diagnostics {
+                CapturePreviewAuthView(access: access, diagnostics: diagnostics, usesCaptureEdge: true, localRecordingOnly: true)
+            } else {
+                CaptureAccessView(access: access, diagnostics: diagnostics)
+            }
+        }
         .onChange(of: model.accessSetupRequested) { _, requested in
             if requested { showsAccess = true; model.accessSetupRequested = false }
         }
@@ -86,10 +93,15 @@ struct CaptureView: View {
                 Text("翻訳先を選び、下のボタンからマイクを許可してください。設定後はロック画面のPhrabitから録音を開始します。")
                     .font(.body)
             }
+            if localPreview && !access.canRecordLocally {
+                Text("初回は本人確認が必要です。ログインと接続確認を済ませてください。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Text(model.isMock ? "この試作版では録音だけを行います。話した内容にかかわらず、ホテルの固定サンプルを表示します。" : "話した日本語を翻訳します。音声と認識した文章を外部AIへ送信します。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Button(model.isMock ? "ログインと送信設定を確認（模擬）" : "ログインと送信設定") { showsAccess = true }
+            Button(localPreview ? "ログインと接続確認" : model.isMock ? "ログインと送信設定を確認（模擬）" : "ログインと送信設定") { showsAccess = true }
                 .frame(minHeight: 44)
             if model.setupComplete {
                 VStack(alignment: .leading, spacing: 12) {
@@ -182,10 +194,10 @@ struct CaptureView: View {
         VStack(spacing: 12) {
             switch model.session.state {
             case .recording:
-                primaryButton("停止して翻訳", symbol: "stop.fill", action: model.stopAndTranslate)
+                primaryButton(localPreview ? "停止してサンプルを見る" : "停止して翻訳", symbol: "stop.fill", action: model.stopAndTranslate)
             case .idle:
                 primaryButton(
-                    model.setupComplete ? "話す" : "マイクを許可して試す",
+                    localPreview && !access.canRecordLocally ? "本人確認に進む" : model.setupComplete ? "話す" : "マイクを許可して試す",
                     symbol: "mic.fill",
                     action: model.startRecording
                 )

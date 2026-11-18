@@ -38,7 +38,7 @@ public final class CaptureConnectionDiagnostics: ObservableObject {
                 if error is CancellationError { self.state = .idle; return }
                 let failure = (error as? CaptureConnectionCheckError) ?? .network
                 if case .signInRequired = failure { self.access.clearSession() }
-                self.state = .failed(failure.localizedDescription)
+                self.state = .failed((error as? CaptureAccessError)?.localizedDescription ?? failure.localizedDescription)
             }
         }
     }

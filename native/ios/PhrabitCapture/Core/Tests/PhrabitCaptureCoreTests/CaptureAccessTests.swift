@@ -53,6 +53,66 @@ final class CaptureAccessTests: XCTestCase {
         if case .failed = access.state {} else { XCTFail("保存失敗を見落としました") }
     }
 
+    func testLocalRecordingRequiresASeparateOwnerCheckWithoutRefreshingAtStart() throws {
+        let backend = AccessTestBackend()
+        backend.cachedUserID = backend.identifier
+        let access = CaptureAccessController(backend: backend, storage: CaptureMemoryStorage(), environmentID: "preview", allowsVerifiedLocalRecording: true)
+        XCTAssertThrowsError(try access.confirmLocalRecording(afterCheckFor: access.sessionRevision))
+        access.acceptConsent()
+        XCTAssertTrue(access.canRecord)
+        XCTAssertFalse(access.canRecordLocally)
+        try access.confirmLocalRecording(afterCheckFor: access.sessionRevision)
+        XCTAssertTrue(access.canRecordLocally)
+        XCTAssertEqual(backend.tokenRequests, 0)
+    }
+
+    func testLocalOwnerProofRestoresOnlyForTheSameUserAndPreview() throws {
+        let storage = CaptureMemoryStorage()
+        let backend = AccessTestBackend()
+        backend.cachedUserID = backend.identifier
+        let first = CaptureAccessController(backend: backend, storage: storage, environmentID: "preview", allowsVerifiedLocalRecording: true)
+        first.acceptConsent()
+        try first.confirmLocalRecording(afterCheckFor: first.sessionRevision)
+        XCTAssertTrue(CaptureAccessController(backend: backend, storage: storage, environmentID: "preview", allowsVerifiedLocalRecording: true).canRecordLocally)
+        XCTAssertFalse(CaptureAccessController(backend: backend, storage: storage, environmentID: "preview").canRecordLocally)
+        XCTAssertFalse(CaptureAccessController(backend: backend, storage: storage, environmentID: "other", allowsVerifiedLocalRecording: true).canRecordLocally)
+        backend.cachedUserID = UUID()
+        XCTAssertFalse(CaptureAccessController(backend: backend, storage: storage, environmentID: "preview", allowsVerifiedLocalRecording: true).canRecordLocally)
+    }
+
+    func testLogoutAndReSignInDoNotReuseAnEarlierOwnerCheck() async throws {
+        let storage = CaptureMemoryStorage()
+        let backend = AccessTestBackend()
+        let access = CaptureAccessController(backend: backend, storage: storage, environmentID: "preview", allowsVerifiedLocalRecording: true)
+        access.acceptConsent()
+        access.signIn()
+        await settle(access)
+        let oldRevision = access.sessionRevision
+        try access.confirmLocalRecording(afterCheckFor: oldRevision)
+        access.clearSession()
+        XCTAssertFalse(access.canRecordLocally)
+        access.signIn()
+        await settle(access)
+        XCTAssertEqual(access.userID, backend.identifier)
+        XCTAssertThrowsError(try access.confirmLocalRecording(afterCheckFor: oldRevision))
+        XCTAssertFalse(access.canRecordLocally)
+        try access.confirmLocalRecording(afterCheckFor: access.sessionRevision)
+        access.withdrawConsent()
+        XCTAssertFalse(access.canRecordLocally)
+        XCTAssertFalse(CaptureAccessController(backend: backend, storage: storage, environmentID: "preview", allowsVerifiedLocalRecording: true).canRecordLocally)
+    }
+
+    func testLocalMockReturnsBothFixedResultsWithoutReadingAudio() async throws {
+        let processor = MockCaptureProcessor()
+        let sessionID = UUID()
+        XCTAssertFalse(processor.sendsAudio)
+        let recognizedText = try await processor.transcribe(audio: Data(), durationMilliseconds: 400, sessionID: sessionID)
+        for language in CaptureLanguage.allCases {
+            let result = try await processor.translate(text: recognizedText, to: language, sessionID: sessionID)
+            XCTAssertEqual(result, MockTranslator.sample(for: language))
+        }
+    }
+
     func testConcurrentTokenRequestsShareOneRefresh() async throws {
         let backend = AccessTestBackend()
         let access = CaptureAccessController(backend: backend, storage: CaptureMemoryStorage(), environmentID: "test")

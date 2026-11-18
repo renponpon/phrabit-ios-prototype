@@ -91,6 +91,17 @@ test('capture check is opt-in and cannot be signed outside Preview auth-only mod
   assert.throws(() => previewAuthSettings({ IOS_PREVIEW_CAPTURE_CHECK: 'yes' }), /Invalid capture check mode/);
 });
 
+test('local mock recording requires both Preview flags', () => {
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_MOCK_RECORDING: 'yes' }), /Invalid mock recording mode/);
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_AUTH_ONLY: 'true', IOS_PREVIEW_MOCK_RECORDING: 'true' }), /requires Preview capture check/);
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_CAPTURE_CHECK: 'true', IOS_PREVIEW_MOCK_RECORDING: 'true' }), /requires Preview auth-only mode/);
+  const settings = { ProjectRef: 'abcdefghijklmnopqrst', PublishableKey: 'sb_publishable_synthetic_example_key', ConnectionCheck: 'capture-edge-v1', LocalMockRecording: 'true' };
+  const targets = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', settings).targets;
+  assert.deepEqual(targets.PhrabitCapture.info.properties.PhrabitPreviewAuthOnly, settings);
+  assert.match(targets.PhrabitCapture.info.properties.NSMicrophoneUsageDescription, /音声は送信せず/);
+  assert.equal(targets.PhrabitCaptureControl.info.properties.PhrabitPreviewAuthOnly, undefined);
+});
+
 test('only the application gets auth configuration and a no-microphone description', () => {
   const settings = { ProjectRef: 'abcdefghijklmnopqrst', PublishableKey: 'sb_publishable_synthetic_example_key' };
   const spec = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', settings);

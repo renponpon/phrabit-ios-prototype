@@ -6,15 +6,18 @@ enum CaptureLaunchRequest {
 
     @MainActor
     static func enqueue() {
-        UserDefaults.standard.set(UUID().uuidString, forKey: key)
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key)
         NotificationCenter.default.post(name: notification, object: nil)
     }
 
     @MainActor
     static func consume() -> Bool {
-        guard UserDefaults.standard.string(forKey: key) != nil else { return false }
-        UserDefaults.standard.removeObject(forKey: key)
-        return true
+        let defaults = UserDefaults.standard
+        let timestamp = defaults.object(forKey: key) as? TimeInterval
+        defaults.removeObject(forKey: key)
+        guard let timestamp else { return false }
+        let age = Date().timeIntervalSince1970 - timestamp
+        return (0...30).contains(age)
     }
 }
 

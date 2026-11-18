@@ -58,7 +58,7 @@ const checks = [
     assert.doesNotMatch(swiftSources, /https?:\/\/|GEMINI_API_KEY|OPENAI_API_KEY|SUPABASE|import Speech|FoundationModels/);
     assert.match(read("App/CaptureViewModel.swift"), /processor \?\? MockCaptureProcessor\(\)/);
     assert.doesNotMatch(read("App/CaptureViewModel.swift") + read("App/PhrabitCaptureApp.swift"), /CaptureHTTPProcessor\(/);
-    assert.match(read("App/PhrabitCaptureApp.swift"), /CaptureAccessController\.mock\(\)/);
+    assert.match(read("App/CapturePreviewAuthView.swift"), /mode = \.offline\(CaptureViewModel\(\), \.mock\(\)\)/);
     assert.match(read("App/CaptureView.swift"), /模擬翻訳・音声は送信しません/);
     assert.match(read("App/CaptureView.swift"), /サンプル入力・録音内容ではありません/);
   }],
@@ -134,18 +134,32 @@ const checks = [
     const verifier = read("Core/Sources/PhrabitCaptureCore/CaptureConnectionVerifier.swift");
     const distribution = readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8");
     const workflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
-    assert.match(app, /case \.offline:\s+offlineView/);
+    assert.match(app, /case \.offline\(let model, let access\):\s+recordingView/);
     assert.match(preview, /mode = \.offline/);
     assert.match(preview, /CaptureConnectionVerifier\(previewAuth:/);
     assert.match(verifier, /auth\/v1\/user/);
     assert.match(verifier, /functions\/v1\/phrabit-capture-check/);
     assert.match(verifier, /capture-edge-v1/);
-    assert.doesNotMatch(preview, /AudioRecorder|CaptureViewModel|CaptureLiveConnection|CaptureHTTPProcessor|\/api\/capture/);
+    assert.doesNotMatch(preview, /AudioRecorder|CaptureLiveConnection|CaptureHTTPProcessor|\/api\/capture/);
     assert.doesNotMatch(read("project.yml"), /PhrabitPreviewAuthOnly/);
     assert.match(distribution, /Approved isolated Preview project only/);
     assert.match(distribution, /testFlightInternalTestingOnly = true/);
     assert.match(workflow, /preview_auth_only:[\s\S]*?default: false/);
     assert.match(workflow, /preview_capture_check:[\s\S]*?default: false/);
+  }],
+  ["opt-in Preview recording requires proof, retains no audio, and uses a fresh lock-screen request", () => {
+    const preview = read("App/CapturePreviewAuthView.swift");
+    const model = read("App/CaptureViewModel.swift");
+    const access = read("Core/Sources/PhrabitCaptureCore/CaptureAccess.swift");
+    const workflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
+    assert.match(preview, /usesCaptureEdge && settings\["LocalMockRecording"\] == "true"/);
+    assert.match(preview, /try await verifier\.verify\(\)[\s\S]*?confirmLocalRecording\(afterCheckFor: revision\)/);
+    assert.match(preview, /CaptureViewModel\(processor: MockCaptureProcessor\(\), recordingAllowed: \{ access\.canRecordLocally \}\)/);
+    assert.match(access, /canRecord && userID == localRecordingOwner/);
+    assert.match(model, /if self\.processor\.sendsAudio \{\s+audio = try Data\(contentsOf: recordingURL\)\s+\} else \{\s+self\.recorder\.discard\(recordingURL\)\s+audio = Data\(\)/);
+    assert.match(read("App/AudioRecorder.swift"), /guard authorized\(\)/);
+    assert.match(read("Shared/CaptureLaunchRequest.swift"), /\(0\.\.\.30\)\.contains\(age\)/);
+    assert.match(workflow, /preview_mock_recording:[\s\S]*?default: false/);
   }],
   ["Phrabit custom symbol asset referenced by the control", () => {
     const asset = JSON.parse(read("Shared/Assets.xcassets/PhrabitControl.symbolset/Contents.json"));

@@ -41,10 +41,13 @@ public final class CaptureAccessController: ObservableObject {
     public var isMock: Bool { backend.isMock }
     public var isBusy: Bool { state == .signingIn }
     public var canRecord: Bool { consentAccepted && state == .signedIn && userID != nil }
+    public var canRecordLocally: Bool { allowsVerifiedLocalRecording && canRecord && userID == localRecordingOwner }
     public var sessionRevision: UUID { generation }
+    @Published private var localRecordingOwner: UUID?
     private let backend: any CaptureAuthenticating
     private let storage: any CaptureSecureStorage
     private let environmentID: String
+    private let allowsVerifiedLocalRecording: Bool
     private var operationID: UUID?
     private var operation: Task<Void, Never>?
     private var refresh: Task<String, Error>?
@@ -52,13 +55,17 @@ public final class CaptureAccessController: ObservableObject {
     private var generation = UUID()
     private let consentKey = "capture-consent-v1"
 
-    public init(backend: any CaptureAuthenticating, storage: any CaptureSecureStorage, environmentID: String) {
+    public init(backend: any CaptureAuthenticating, storage: any CaptureSecureStorage, environmentID: String, allowsVerifiedLocalRecording: Bool = false) {
         self.backend = backend
         self.storage = CaptureEnvironmentStorage(base: storage, namespace: environmentID)
         self.environmentID = environmentID
+        self.allowsVerifiedLocalRecording = allowsVerifiedLocalRecording
         do {
             if let bytes = try self.storage.retrieve(key: consentKey), let record = try? JSONDecoder().decode(ConsentRecord.self, from: bytes) {
                 consentAccepted = record.version == 1 && record.environment == environmentID && record.accepted
+                if consentAccepted, allowsVerifiedLocalRecording, let cached = backend.cachedUserID, cached == record.localRecordingOwner {
+                    localRecordingOwner = cached
+                }
             }
             userID = consentAccepted ? backend.cachedUserID : nil
             state = consentAccepted ? userID == nil ? .signedOut : .signedIn : .consentRequired
@@ -68,7 +75,8 @@ public final class CaptureAccessController: ObservableObject {
     public func acceptConsent() {
         guard !isBusy else { return }
         do {
-            try storage.store(key: consentKey, value: JSONEncoder().encode(ConsentRecord(version: 1, environment: environmentID, accepted: true)))
+            try storeConsent(accepted: true)
+            localRecordingOwner = nil
             consentAccepted = true
             userID = backend.cachedUserID
             state = userID == nil ? .signedOut : .signedIn
@@ -77,6 +85,11 @@ public final class CaptureAccessController: ObservableObject {
 
     public func signIn() {
         guard consentAccepted, !isBusy, state != .signedIn else { return }
+        if allowsVerifiedLocalRecording {
+            localRecordingOwner = nil
+            do { try storeConsent(accepted: true) }
+            catch { state = .failed(CaptureAccessError.storage.localizedDescription); return }
+        }
         let identifier = UUID()
         operationID = identifier
         state = .signingIn
@@ -111,7 +124,12 @@ public final class CaptureAccessController: ObservableObject {
         refresh = nil
         refreshID = nil
         userID = nil
-        do { try backend.clearLocalSession(); state = consentAccepted ? .signedOut : .consentRequired }
+        localRecordingOwner = nil
+        do {
+            try backend.clearLocalSession()
+            if allowsVerifiedLocalRecording { try storeConsent(accepted: consentAccepted) }
+            state = consentAccepted ? .signedOut : .consentRequired
+        }
         catch { state = .failed(CaptureAccessError.storage.localizedDescription) }
     }
 
@@ -119,9 +137,22 @@ public final class CaptureAccessController: ObservableObject {
         consentAccepted = false
         clearSession()
         do {
-            try storage.store(key: consentKey, value: JSONEncoder().encode(ConsentRecord(version: 1, environment: environmentID, accepted: false)))
+            try storeConsent(accepted: false)
             state = .consentRequired
         } catch { state = .failed(CaptureAccessError.storage.localizedDescription) }
+    }
+
+    public func confirmLocalRecording(afterCheckFor revision: UUID) throws {
+        try Task.checkCancellation()
+        guard allowsVerifiedLocalRecording, canRecord, generation == revision, let owner = userID else { throw CancellationError() }
+        do { try storeConsent(accepted: true, localRecordingOwner: owner) }
+        catch { throw CaptureAccessError.storage }
+        localRecordingOwner = owner
+    }
+
+    private func storeConsent(accepted: Bool, localRecordingOwner: UUID? = nil) throws {
+        let record = ConsentRecord(version: 1, environment: environmentID, accepted: accepted, localRecordingOwner: localRecordingOwner)
+        try storage.store(key: consentKey, value: JSONEncoder().encode(record))
     }
 
     public func validAccessToken() async throws -> String {
@@ -168,6 +199,7 @@ private struct ConsentRecord: Codable {
     let version: Int
     let environment: String
     let accepted: Bool
+    let localRecordingOwner: UUID?
 }
 
 public final class CaptureMemoryStorage: CaptureSecureStorage, @unchecked Sendable {
