@@ -12,6 +12,11 @@ on:
         type: boolean
         required: true
         default: false
+      preview_auth_only:
+        description: 検証用Googleログイン・接続確認だけ（録音・翻訳不可）
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -50,6 +55,9 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version
       - name: Import approved signing material
         env:
+          IOS_PREVIEW_AUTH_ONLY: ${{ inputs.preview_auth_only }}
+          IOS_PREVIEW_PROJECT_REF: ${{ secrets.IOS_PREVIEW_PROJECT_REF }}
+          IOS_PREVIEW_PUBLISHABLE_KEY: ${{ secrets.IOS_PREVIEW_PUBLISHABLE_KEY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           IOS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.IOS_SIGNING_CERTIFICATE_BASE64 }}
           IOS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.IOS_SIGNING_CERTIFICATE_PASSWORD }}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,7 +15,26 @@ export function validateExecution(environment) {
   assert.ok(environment.RUNNER_TEMP, 'Ephemeral runner storage is required');
 }
 
-export function distributionSpec(teamId, appUuid, controlUuid, buildNumber) {
+export function previewAuthSettings(environment) {
+  if (!environment.IOS_PREVIEW_AUTH_ONLY || environment.IOS_PREVIEW_AUTH_ONLY === 'false') return undefined;
+  assert.equal(environment.IOS_PREVIEW_AUTH_ONLY, 'true', 'Invalid preview mode');
+  const reference = environment.IOS_PREVIEW_PROJECT_REF ?? '';
+  const publishableKey = environment.IOS_PREVIEW_PUBLISHABLE_KEY ?? '';
+  assert.ok(/^[a-z]{20}$/.test(reference) && createHash('sha256').update(reference).digest('hex') === '34f9aba9cefba7372e95560573ca702cb13e4ad0b3aed770d52e3096ec8334f5117', 'Approved isolated Preview project only');
+  assert.ok(/^sb_publishable_[A-Za-z0-9_-]{20,150}$/.test(publishableKey), 'A modern publishable key is required; secret and service-role keys are not accepted');
+  return { ProjectRef: reference, PublishableKey: publishableKey };
+}
+
+export function previewAuthPrivacyCategories() {
+  return ['Name', 'EmailAddress', 'UserID'].map(category => ({
+    NSPrivacyCollectedDataType: `NSPrivacyCollectedDataType${category}`,
+    NSPrivacyCollectedDataTypeLinked: true,
+    NSPrivacyCollectedDataTypeTracking: false,
+    NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality']
+  }));
+}
+
+export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, previewSettings) {
   assert.match(teamId, /^[A-Z0-9]{10}$/);
   assert.match(appUuid, /^[A-F0-9-]{36}$/i);
   assert.match(controlUuid, /^[A-F0-9-]{36}$/i);
@@ -34,7 +53,14 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber) {
     include: ['project.yml'],
     settings: { base: signing },
     targets: {
-      PhrabitCapture: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: appUuid } }, info },
+      PhrabitCapture: {
+        settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: appUuid } },
+        info: previewSettings ? { properties: {
+          ...info.properties,
+          PhrabitPreviewAuthOnly: previewSettings,
+          NSMicrophoneUsageDescription: 'この接続検証版はマイクを使用しません。'
+        } } : info
+      },
       PhrabitCaptureControl: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: controlUuid } }, info }
     }
   };
@@ -108,6 +134,7 @@ function main(stage) {
 
   validateExecution(environment);
   if (stage === 'prepare') {
+    const previewSettings = previewAuthSettings(environment);
     mkdirSync(privateRoot, { mode: 0o700 });
     const previousKeychains = [...run('security', ['list-keychains', '-d', 'user'], 'keychain-search-list').matchAll(/"([^"]+)"/g)].map((match) => match[1]);
     const state = { previousKeychains, installedProfiles: [] };
@@ -158,9 +185,11 @@ function main(stage) {
     state.buildNumber = `${environment.GITHUB_RUN_NUMBER}.${environment.GITHUB_RUN_ATTEMPT}`;
     state.teamId = requireSecret('APPLE_TEAM_ID');
     state.profileUuids = { PhrabitCapture: profiles[0].UUID, PhrabitCaptureControl: profiles[1].UUID };
-    const spec = distributionSpec(requireSecret('APPLE_TEAM_ID'), profiles[0].UUID, profiles[1].UUID, state.buildNumber);
+    state.previewAuthOnly = Boolean(previewSettings);
+    const spec = distributionSpec(requireSecret('APPLE_TEAM_ID'), profiles[0].UUID, profiles[1].UUID, state.buildNumber, previewSettings);
     writeFileSync(path.join(prototype, 'distribution.json'), JSON.stringify(spec), { mode: 0o600 });
     const options = { method: 'app-store-connect', teamID: requireSecret('APPLE_TEAM_ID'), signingStyle: 'manual', signingCertificate: 'Apple Distribution', manageAppVersionAndBuildNumber: false, provisioningProfiles: { 'com.phrabit.app': profiles[0].UUID, 'com.phrabit.app.control': profiles[1].UUID } };
+    if (previewSettings) options.testFlightInternalTestingOnly = true;
     writePrivate(path.join(privateRoot, 'export.json'), JSON.stringify(options));
     run('plutil', ['-convert', 'xml1', '-o', path.join(privateRoot, 'ExportOptions.plist'), path.join(privateRoot, 'export.json')], 'export-options');
     saveState(state);
@@ -169,6 +198,11 @@ function main(stage) {
     const state = readState();
     assert.match(run('xcodebuild', ['-version'], 'xcode-version'), /^Xcode 26\./);
     assert.match(run('xcrun', ['--sdk', 'iphoneos', '--show-sdk-version'], 'ios-sdk'), /^26\./);
+    if (state.previewAuthOnly) {
+      const help = spawnSync('xcodebuild', ['-help'], { cwd: prototype, encoding: 'utf8' });
+      assert.match(`${help.stdout ?? ''}\n${help.stderr ?? ''}`, /\btestFlightInternalTestingOnly\b/);
+      run('plutil', ['-replace', 'NSPrivacyCollectedDataTypes', '-json', JSON.stringify(previewAuthPrivacyCategories()), 'App/PrivacyInfo.xcprivacy'], 'preview-auth-privacy');
+    }
     run('xcodegen', ['generate', '--spec', 'distribution.json'], 'project-generate');
     for (const target of ['PhrabitCapture', 'PhrabitCaptureControl']) {
       const generatedSettings = JSON.parse(run('xcodebuild', targetSettingsArguments(target), `generated-signing-settings-${target}`));
@@ -191,6 +225,15 @@ function main(stage) {
       assert.equal(run('plutil', ['-extract', 'CFBundleVersion', 'raw', '-o', '-', path.join(bundlePath, 'Info.plist')], `${identifier}-build-version`).trim(), state.buildNumber, 'Bundle build version mismatch');
       assert.equal(run('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', path.join(bundlePath, 'Info.plist')], `${identifier}-marketing-version`).trim(), '0.1.0', 'Bundle marketing version mismatch');
       run('codesign', ['--verify', '--strict', bundlePath], `${identifier}-signature`);
+    }
+    if (state.previewAuthOnly) {
+      const settings = JSON.parse(readFileSync(path.join(prototype, 'distribution.json'), 'utf8')).targets.PhrabitCapture.info.properties.PhrabitPreviewAuthOnly;
+      const bundled = JSON.parse(run('plutil', ['-extract', 'PhrabitPreviewAuthOnly', 'json', '-o', '-', path.join(appPath, 'Info.plist')], 'preview-auth-bundle'));
+      assert.ok(bundled.ProjectRef === settings.ProjectRef && bundled.PublishableKey === settings.PublishableKey, 'Preview bundle configuration mismatch');
+      const extensionInfo = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(controlPath, 'Info.plist')], 'control-info'));
+      assert.ok(!('PhrabitPreviewAuthOnly' in extensionInfo), 'Preview configuration must be app-only');
+      const bundledPrivacy = JSON.parse(run('plutil', ['-extract', 'NSPrivacyCollectedDataTypes', 'json', '-o', '-', path.join(appPath, 'PrivacyInfo.xcprivacy')], 'preview-auth-bundled-privacy'));
+      assert.deepEqual(bundledPrivacy, previewAuthPrivacyCategories());
     }
     const exportPath = path.join(privateRoot, 'export');
     run('xcodebuild', ['-exportArchive', '-archivePath', archivePath, '-exportPath', exportPath, '-exportOptionsPlist', path.join(privateRoot, 'ExportOptions.plist')], 'ipa-export');

@@ -128,6 +128,22 @@ const checks = [
     assert.match(fixtures, /reading: nil/);
     assert.match(fixtures, /reading: "Kěyǐ/);
   }],
+  ["signed preview auth variant cannot record, translate or call application APIs", () => {
+    const app = read("App/PhrabitCaptureApp.swift");
+    const preview = read("App/CapturePreviewAuthView.swift");
+    const verifier = read("Core/Sources/PhrabitCaptureCore/CaptureConnectionVerifier.swift");
+    const distribution = readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8");
+    const workflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
+    assert.match(app, /case \.offline:\s+offlineView/);
+    assert.match(preview, /mode = \.offline/);
+    assert.match(preview, /CaptureConnectionVerifier\(previewAuth:/);
+    assert.match(verifier, /auth\/v1\/user/);
+    assert.doesNotMatch(preview, /AudioRecorder|CaptureViewModel|CaptureLiveConnection|CaptureHTTPProcessor|\/api\/capture/);
+    assert.doesNotMatch(read("project.yml"), /PhrabitPreviewAuthOnly/);
+    assert.match(distribution, /Approved isolated Preview project only/);
+    assert.match(distribution, /testFlightInternalTestingOnly = true/);
+    assert.match(workflow, /preview_auth_only:[\s\S]*?default: false/);
+  }],
   ["Phrabit custom symbol asset referenced by the control", () => {
     const asset = JSON.parse(read("Shared/Assets.xcassets/PhrabitControl.symbolset/Contents.json"));
     assert.equal(asset.symbols[0].filename, "PhrabitControl.svg");

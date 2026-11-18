@@ -79,9 +79,10 @@ struct CaptureAccessView: View {
     }
 }
 
-private struct CaptureConnectionDiagnosticsView: View {
+struct CaptureConnectionDiagnosticsView: View {
     @ObservedObject var diagnostics: CaptureConnectionDiagnostics
     let canCheck: Bool
+    var previewOnly = false
 
     var body: some View {
         Section {
@@ -98,7 +99,7 @@ private struct CaptureConnectionDiagnosticsView: View {
             }
             Button("接続を確認（音声を送らない）", action: diagnostics.run)
                 .disabled(!canCheck || diagnostics.isBusy)
-            Text("認証だけを確認します。録音・翻訳・フレーズ保存・学習日の記録は行いません。録音開始前に自動実行しません。")
+            Text(previewOnly ? "Previewの認証サーバーに接続し、ログイン中のアカウントか確認します。音声・翻訳・学習データは送りません。" : "認証だけを確認します。録音・翻訳・フレーズ保存・学習日の記録は行いません。録音開始前に自動実行しません。")
                 .font(.footnote)
         } header: { Text("接続確認") }
     }

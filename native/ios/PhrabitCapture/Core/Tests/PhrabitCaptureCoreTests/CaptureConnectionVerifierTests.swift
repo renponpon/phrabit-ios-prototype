@@ -124,6 +124,81 @@ final class CaptureConnectionVerifierTests: XCTestCase {
         }
     }
 
+    func testPreviewAuthChecksOnlyCurrentUserWithoutAudio() async throws {
+        let access = signedIn()
+        let owner = try XCTUnwrap(access.userID)
+        let key = "sb_publishable_synthetic_example"
+        let configuration = try previewConfiguration(key: key)
+        var requests = 0
+        ConnectionCheckStub.handler = { request in
+            requests += 1
+            XCTAssertEqual(request.url, configuration.projectURL.appendingPathComponent("auth/v1/user"))
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-check")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "apikey"), key)
+            XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+            XCTAssertNil(request.httpBody)
+            XCTAssertNil(request.httpBodyStream)
+            let body: [String: Any] = ["id": owner.uuidString, "role": "authenticated", "is_anonymous": false, "email": "synthetic"]
+            return (200, "application/json", try JSONSerialization.data(withJSONObject: body), nil)
+        }
+        let client = try CaptureConnectionVerifier(previewAuth: configuration, access: access, protocolClasses: [ConnectionCheckStub.self])
+        try await client.verify()
+        XCTAssertEqual(requests, 1)
+    }
+
+    func testPreviewAuthRejectsDifferentUserAnonymousOrWrongRole() async throws {
+        let access = signedIn()
+        let owner = try XCTUnwrap(access.userID)
+        let configuration = try previewConfiguration()
+        let client = try CaptureConnectionVerifier(previewAuth: configuration, access: access, protocolClasses: [ConnectionCheckStub.self])
+        let payloads: [[String: Any]] = [
+            ["id": UUID().uuidString, "role": "authenticated", "is_anonymous": false],
+            ["id": owner.uuidString, "role": "authenticated", "is_anonymous": true],
+            ["id": owner.uuidString, "role": "anon", "is_anonymous": false],
+            ["id": owner.uuidString, "role": "authenticated"],
+        ]
+        for payload in payloads {
+            ConnectionCheckStub.handler = { _ in
+                (200, "application/json", try JSONSerialization.data(withJSONObject: payload), nil)
+            }
+            do { try await client.verify(); XCTFail("別の利用者または未認証の確認が成功しました") }
+            catch let failure as CaptureConnectionCheckError { if case .invalidResponse = failure {} else { XCTFail("誤ったエラー") } }
+        }
+        XCTAssertTrue(access.canRecord)
+    }
+
+    func testPreviewAuthRejectsNonSupabaseHostOrDifferentOrigin() throws {
+        let access = signedIn()
+        let home = try previewConfiguration()
+        let unrelated = URL(string: "https://preview.invalid")!
+        let mismatch = try CaptureAuthConfiguration(apiOrigin: unrelated, projectURL: home.projectURL, publishableKey: home.publishableKey)
+        let foreign = try CaptureAuthConfiguration(apiOrigin: unrelated, projectURL: unrelated, publishableKey: home.publishableKey)
+        XCTAssertThrowsError(try CaptureConnectionVerifier(previewAuth: mismatch, access: access))
+        XCTAssertThrowsError(try CaptureConnectionVerifier(previewAuth: foreign, access: access))
+    }
+
+    func testPreviewAuthErrorsDoNotTreatArbitrary401AsExpiredSession() async throws {
+        let access = signedIn()
+        let client = try CaptureConnectionVerifier(previewAuth: previewConfiguration(), access: access, protocolClasses: [ConnectionCheckStub.self])
+        for (status, code) in [(401, "bad_jwt"), (401, "invalid_api_key"), (429, "rate_limited"), (503, "unavailable")] {
+            ConnectionCheckStub.handler = { _ in (status, "application/json", try JSONSerialization.data(withJSONObject: ["code": code]), nil) }
+            do { try await client.verify(); XCTFail("失敗を成功にしました") }
+            catch let failure as CaptureConnectionCheckError {
+                switch (status, code, failure) {
+                case (401, "bad_jwt", .signInRequired), (401, "invalid_api_key", .invalidResponse), (429, _, .network), (503, _, .network): break
+                default: XCTFail("誤ったエラー")
+                }
+            }
+        }
+        XCTAssertTrue(access.canRecord)
+    }
+
+    private func previewConfiguration(key: String = "sb_publishable_synthetic_example") throws -> CaptureAuthConfiguration {
+        let project = URL(string: "https://abcdefghijklmnopqrst.supabase.co")!
+        return try CaptureAuthConfiguration(apiOrigin: project, projectURL: project, publishableKey: key)
+    }
+
     private func signedIn(_ suppliedBackend: ConnectionCheckBackend? = nil) -> CaptureAccessController {
         let backend = suppliedBackend ?? ConnectionCheckBackend()
         let access = CaptureAccessController(backend: backend, storage: CaptureMemoryStorage(), environmentID: "check")

@@ -22,6 +22,7 @@ public final class CaptureConnectionVerifier {
     private let endpoint: URL
     private let session: URLSession
     private let access: CaptureAccessController
+    private let previewAuthKey: String?
 
     public init(origin: URL, access: CaptureAccessController, protocolClasses: [AnyClass]? = nil) throws {
         guard origin.scheme == "https", origin.host != nil, origin.user == nil, origin.password == nil,
@@ -29,11 +30,23 @@ public final class CaptureConnectionVerifier {
         self.endpoint = origin.appendingPathComponent("api/capture/access")
         self.access = access
         self.session = CaptureHTTPProcessor.makeSession(protocolClasses: protocolClasses, timeout: 10)
+        self.previewAuthKey = nil
+    }
+
+    public init(previewAuth configuration: CaptureAuthConfiguration, access: CaptureAccessController, protocolClasses: [AnyClass]? = nil) throws {
+        let project = configuration.projectURL
+        guard project == configuration.apiOrigin, project.port == nil,
+              project.host?.range(of: #"^[a-z]{20}\.supabase\.co$"#, options: .regularExpression) != nil,
+              configuration.publishableKey.hasPrefix("sb_publishable_") else { throw CaptureClientError.invalidConfiguration }
+        self.endpoint = project.appendingPathComponent("auth/v1/user")
+        self.access = access
+        self.session = CaptureHTTPProcessor.makeSession(protocolClasses: protocolClasses, timeout: 10)
+        self.previewAuthKey = configuration.publishableKey
     }
 
     public func verify() async throws {
         try Task.checkCancellation()
-        guard access.canRecord else { throw CaptureConnectionCheckError.signInRequired }
+        guard access.canRecord, let expectedUser = access.userID else { throw CaptureConnectionCheckError.signInRequired }
         let revision = access.sessionRevision
         let token: String
         do { token = try await access.validAccessToken() }
@@ -48,6 +61,7 @@ public final class CaptureConnectionVerifier {
         var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let previewAuthKey { request.setValue(previewAuthKey, forHTTPHeaderField: "apikey") }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         do {
@@ -56,6 +70,10 @@ public final class CaptureConnectionVerifier {
             guard access.canRecord, access.sessionRevision == revision else { throw CancellationError() }
             guard let response = response as? HTTPURLResponse, response.url == endpoint else { throw CaptureConnectionCheckError.invalidResponse }
             if (300...399).contains(response.statusCode) { throw CaptureConnectionCheckError.deploymentProtected }
+            if previewAuthKey != nil {
+                try Self.validatePreviewAuth(data: data, response: response, expectedUser: expectedUser)
+                return
+            }
             guard data.count <= 4096,
                   response.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("application/json") == true,
                   let payload = try? JSONSerialization.jsonObject(with: data) as? [String: String],
@@ -78,5 +96,29 @@ public final class CaptureConnectionVerifier {
         } catch is CancellationError { throw CancellationError() }
         catch let failure as CaptureConnectionCheckError { throw failure }
         catch { if Task.isCancelled { throw CancellationError() }; throw CaptureConnectionCheckError.network }
+    }
+
+    private static func validatePreviewAuth(data: Data, response: HTTPURLResponse, expectedUser: UUID) throws {
+        if response.statusCode == 429 || (500...599).contains(response.statusCode) { throw CaptureConnectionCheckError.network }
+        guard data.count <= 131_072,
+              response.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("application/json") == true,
+              let payload = try? JSONDecoder().decode(PreviewAuthResponse.self, from: data) else { throw CaptureConnectionCheckError.invalidResponse }
+        if response.statusCode == 401, let code = payload.code, ["bad_jwt", "session_not_found", "session_expired"].contains(code) {
+            throw CaptureConnectionCheckError.signInRequired
+        }
+        guard response.statusCode == 200, payload.id == expectedUser, payload.role == "authenticated",
+              payload.isAnonymous == false else { throw CaptureConnectionCheckError.invalidResponse }
+    }
+}
+
+private struct PreviewAuthResponse: Decodable {
+    let id: UUID?
+    let role: String?
+    let isAnonymous: Bool?
+    let code: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, role, code
+        case isAnonymous = "is_anonymous"
     }
 }

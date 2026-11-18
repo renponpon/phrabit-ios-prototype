@@ -20,6 +20,7 @@ const nativeFiles = [
   "App/CaptureViewModel.swift",
   "App/CaptureCredentialStore.swift",
   "App/CaptureAccessView.swift",
+  "App/CapturePreviewAuthView.swift",
   "App/CaptureBrowserLogin.swift",
   "App/CaptureLiveConnection.swift",
   "App/PhrabitCaptureApp.swift",

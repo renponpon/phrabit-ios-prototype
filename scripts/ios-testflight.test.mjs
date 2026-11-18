@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { classifyCommandFailure, distributionSpec, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
+import { classifyCommandFailure, distributionSpec, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
 
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
@@ -67,4 +67,33 @@ test('queries each explicit target rather than assuming scheme includes dependen
     assert.ok(!argumentsList.includes('-scheme'));
   }
   assert.throws(() => targetSettingsArguments('UnexpectedTarget'));
+});
+
+test('preview auth remains off by default and rejects incomplete or unrelated configuration', () => {
+  assert.equal(previewAuthSettings({}), undefined);
+  assert.equal(previewAuthSettings({ IOS_PREVIEW_AUTH_ONLY: 'false' }), undefined);
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_AUTH_ONLY: 'yes' }), /Invalid preview mode/);
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_AUTH_ONLY: 'true' }), /Approved isolated Preview project only/);
+  assert.throws(() => previewAuthSettings({
+    IOS_PREVIEW_AUTH_ONLY: 'true',
+    IOS_PREVIEW_PROJECT_REF: 'abcdefghijklmnopqrst',
+    IOS_PREVIEW_PUBLISHABLE_KEY: 'sb_publishable_synthetic_example_key'
+  }), /Approved isolated Preview project only/);
+});
+
+test('only the application gets auth configuration and a no-microphone description', () => {
+  const settings = { ProjectRef: 'abcdefghijklmnopqrst', PublishableKey: 'sb_publishable_synthetic_example_key' };
+  const spec = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', settings);
+  assert.deepEqual(spec.targets.PhrabitCapture.info.properties.PhrabitPreviewAuthOnly, settings);
+  assert.match(spec.targets.PhrabitCapture.info.properties.NSMicrophoneUsageDescription, /使用しません/);
+  assert.equal(spec.targets.PhrabitCaptureControl.info.properties.PhrabitPreviewAuthOnly, undefined);
+  assert.equal(distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1').targets.PhrabitCapture.info.properties.PhrabitPreviewAuthOnly, undefined);
+});
+
+test('auth-only manifest declares linked account fields, not tracking or audio', () => {
+  const categories = previewAuthPrivacyCategories();
+  assert.deepEqual(categories.map(value => value.NSPrivacyCollectedDataType),
+    ['NSPrivacyCollectedDataTypeName', 'NSPrivacyCollectedDataTypeEmailAddress', 'NSPrivacyCollectedDataTypeUserID']);
+  assert.ok(categories.every(value => value.NSPrivacyCollectedDataTypeLinked && !value.NSPrivacyCollectedDataTypeTracking &&
+    value.NSPrivacyCollectedDataTypePurposes.join() === 'NSPrivacyCollectedDataTypePurposeAppFunctionality'));
 });
