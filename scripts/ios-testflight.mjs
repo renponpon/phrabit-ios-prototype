@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+export const approvedPreviewProjectDigest = '34f9aba9cefba7372e95560573ca702cb13e4ad0b3aed770d52e3096ec8334f5';
+
 export function validateExecution(environment) {
   assert.equal(environment.GITHUB_ACTIONS, 'true', 'GitHub Actions is required');
   assert.equal(environment.GITHUB_REPOSITORY, 'renponpon/phrabit-ios-prototype', 'Dedicated prototype repository only');
@@ -20,7 +22,7 @@ export function previewAuthSettings(environment) {
   assert.equal(environment.IOS_PREVIEW_AUTH_ONLY, 'true', 'Invalid preview mode');
   const reference = environment.IOS_PREVIEW_PROJECT_REF ?? '';
   const publishableKey = environment.IOS_PREVIEW_PUBLISHABLE_KEY ?? '';
-  assert.ok(/^[a-z]{20}$/.test(reference) && createHash('sha256').update(reference).digest('hex') === '34f9aba9cefba7372e95560573ca702cb13e4ad0b3aed770d52e3096ec8334f5117', 'Approved isolated Preview project only');
+  assert.ok(/^[a-z]{20}$/.test(reference) && createHash('sha256').update(reference).digest('hex') === approvedPreviewProjectDigest, 'Approved isolated Preview project only');
   assert.ok(/^sb_publishable_[A-Za-z0-9_-]{20,150}$/.test(publishableKey), 'A modern publishable key is required; secret and service-role keys are not accepted');
   return { ProjectRef: reference, PublishableKey: publishableKey };
 }

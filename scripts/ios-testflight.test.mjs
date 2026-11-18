@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { classifyCommandFailure, distributionSpec, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
+import { approvedPreviewProjectDigest, classifyCommandFailure, distributionSpec, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
 
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
@@ -67,6 +67,10 @@ test('queries each explicit target rather than assuming scheme includes dependen
     assert.ok(!argumentsList.includes('-scheme'));
   }
   assert.throws(() => targetSettingsArguments('UnexpectedTarget'));
+});
+
+test('pins the approved Preview project using a complete SHA-256 digest', () => {
+  assert.match(approvedPreviewProjectDigest, /^[a-f0-9]{64}$/);
 });
 
 test('preview auth remains off by default and rejects incomplete or unrelated configuration', () => {
