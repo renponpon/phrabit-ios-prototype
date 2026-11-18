@@ -107,6 +107,59 @@ final class CaptureHTTPProcessorTests: XCTestCase {
         }
     }
 
+    func testProtectedDeploymentDoesNotLookLikeAnExpiredLogin() async throws {
+        defer { CaptureStubProtocol.responseHeaders = nil }
+        for status in [302, 401, 403] {
+            var requests = 0
+            CaptureStubProtocol.responseHeaders = ["Content-Type": "text/html", "Location": "https://login.invalid"]
+            CaptureStubProtocol.handler = { _ in requests += 1; return (status, Data("private protected page".utf8)) }
+            do {
+                _ = try await makeProcessor().translate(text: "こんにちは", to: .english, sessionID: identifier)
+                XCTFail("保護された応答を受け付けました")
+            } catch let failure as CaptureClientError {
+                if case .deploymentProtected = failure {} else { XCTFail("認証期限切れと混同しました") }
+                XCTAssertFalse(failure.localizedDescription.contains("private protected"))
+            }
+            XCTAssertEqual(requests, 1)
+        }
+    }
+
+    func testOnlyAnApplicationAuthErrorRequiresAnotherLogin() async throws {
+        for code in ["capture_auth_required", "foreign_auth_error"] {
+            let response = try JSONSerialization.data(withJSONObject: ["requestId": UUID().uuidString, "code": code])
+            CaptureStubProtocol.handler = { _ in (401, response) }
+            do {
+                _ = try await makeProcessor().translate(text: "こんにちは", to: .english, sessionID: identifier)
+                XCTFail("401を受け付けました")
+            } catch let failure as CaptureClientError {
+                if code == "capture_auth_required" {
+                    if case .authenticationRequired = failure {} else { XCTFail("アプリの認証エラーを検出できませんでした") }
+                } else if case .deploymentProtected = failure {} else { XCTFail("外部の401で再ログインを要求しました") }
+            }
+        }
+    }
+
+    func testDisabledApplicationIsDifferentFromDeploymentProtection() async throws {
+        let response = try JSONSerialization.data(withJSONObject: ["requestId": UUID().uuidString, "code": "capture_unavailable"])
+        CaptureStubProtocol.handler = { _ in (403, response) }
+        do {
+            _ = try await makeProcessor().translate(text: "こんにちは", to: .english, sessionID: identifier)
+            XCTFail("無効な機能を受け付けました")
+        } catch let failure as CaptureClientError {
+            if case .unavailable = failure {} else { XCTFail("機能OFFを認証期限切れと混同しました") }
+        }
+    }
+
+    func testUntypedJson401CannotInvalidateLogin() async throws {
+        CaptureStubProtocol.handler = { _ in (401, Data("{\"code\":\"capture_auth_required\"}".utf8)) }
+        do {
+            _ = try await makeProcessor().translate(text: "こんにちは", to: .english, sessionID: identifier)
+            XCTFail("識別できない401を受け付けました")
+        } catch let failure as CaptureClientError {
+            if case .deploymentProtected = failure {} else { XCTFail("requestIdなしでログアウトを要求しました") }
+        }
+    }
+
     private func makeProcessor() throws -> CaptureHTTPProcessor {
         try CaptureHTTPProcessor(origin: URL(string: "https://preview.invalid")!, protocolClasses: [CaptureStubProtocol.self], consentGranted: { true }, accessToken: { "test-session" })
     }
@@ -135,13 +188,14 @@ final class CaptureHTTPProcessorTests: XCTestCase {
 
 private final class CaptureStubProtocol: URLProtocol {
     static var handler: ((URLRequest) throws -> (Int, Data))?
+    static var responseHeaders: [String: String]?
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         do {
             guard let handler = Self.handler, let url = request.url else { throw URLError(.badURL) }
             let (status, data) = try handler(request)
-            let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json", "Cache-Control": "no-store"])!
+            let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: Self.responseHeaders ?? ["Content-Type": "application/json", "Cache-Control": "no-store"])!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)

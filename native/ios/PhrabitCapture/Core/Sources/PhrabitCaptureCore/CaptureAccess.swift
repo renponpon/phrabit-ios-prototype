@@ -41,6 +41,7 @@ public final class CaptureAccessController: ObservableObject {
     public var isMock: Bool { backend.isMock }
     public var isBusy: Bool { state == .signingIn }
     public var canRecord: Bool { consentAccepted && state == .signedIn && userID != nil }
+    public var sessionRevision: UUID { generation }
     private let backend: any CaptureAuthenticating
     private let storage: any CaptureSecureStorage
     private let environmentID: String

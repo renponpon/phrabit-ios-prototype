@@ -22,14 +22,14 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
         self.accessToken = accessToken
     }
 
-    private static func makeSession(protocolClasses: [AnyClass]? = nil) -> URLSession {
+    static func makeSession(protocolClasses: [AnyClass]? = nil, timeout: TimeInterval = 45) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 45
-        configuration.timeoutIntervalForResource = 45
+        configuration.timeoutIntervalForRequest = timeout
+        configuration.timeoutIntervalForResource = timeout
         if let protocolClasses { configuration.protocolClasses = protocolClasses }
         return URLSession(configuration: configuration, delegate: CaptureRedirectBlocker(), delegateQueue: nil)
     }
@@ -102,8 +102,13 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
                 guard data.count <= 131_072, response.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("application/json") == true else { throw CaptureClientError.invalidResponse }
                 return data
             case 400, 413: throw CaptureClientError.invalidInput
-            case 401: throw CaptureClientError.authenticationRequired
-            case 403: throw CaptureClientError.unavailable
+            case 401:
+                guard Self.isCaptureError(data, response: response, code: "capture_auth_required") else { throw CaptureClientError.deploymentProtected }
+                throw CaptureClientError.authenticationRequired
+            case 403:
+                guard Self.isCaptureError(data, response: response, code: "capture_unavailable") else { throw CaptureClientError.deploymentProtected }
+                throw CaptureClientError.unavailable
+            case 300...399: throw CaptureClientError.deploymentProtected
             case 429: throw CaptureClientError.limited
             case 503: throw CaptureClientError.budgetUnavailable
             default: throw CaptureClientError.requestFailed
@@ -111,6 +116,13 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
         } catch is CancellationError { throw CancellationError() }
         catch let error as CaptureClientError { throw error }
         catch { if Task.isCancelled { throw CancellationError() }; throw CaptureClientError.requestFailed }
+    }
+
+    private static func isCaptureError(_ data: Data, response: HTTPURLResponse, code: String) -> Bool {
+        guard data.count <= 131_072, response.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("application/json") == true,
+              let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any], value["code"] as? String == code,
+              let identifier = value["requestId"] as? String, UUID(uuidString: identifier) != nil else { return false }
+        return true
     }
 }
 

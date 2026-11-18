@@ -25,6 +25,7 @@ public struct MockCaptureProcessor: CaptureProcessing {
 public enum CaptureClientError: LocalizedError {
     case invalidConfiguration
     case authenticationRequired
+    case deploymentProtected
     case invalidInput
     case invalidResponse
     case unavailable
@@ -36,6 +37,7 @@ public enum CaptureClientError: LocalizedError {
         switch self {
         case .invalidConfiguration: return "接続設定を確認してください。"
         case .authenticationRequired: return "Phrabitに再ログインしてください。"
+        case .deploymentProtected: return "検証サーバーのアクセス設定を確認してください。再ログインでは解消しません。"
         case .invalidInput: return "入力内容を確認し、短く録音し直してください。"
         case .invalidResponse: return "応答を読み取れませんでした。送信済み処理の料金が発生する場合があります。"
         case .unavailable: return "この試作はまだ利用できません。"

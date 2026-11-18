@@ -4,6 +4,7 @@ import SwiftUI
 struct CaptureView: View {
     @ObservedObject var model: CaptureViewModel
     @ObservedObject var access: CaptureAccessController
+    var diagnostics: CaptureConnectionDiagnostics? = nil
     @State private var showsAccess = false
     @AccessibilityFocusState private var resultFocused: Bool
     private let background = Color(red: 21 / 255, green: 28 / 255, blue: 45 / 255)
@@ -34,7 +35,7 @@ struct CaptureView: View {
                 .padding(.bottom, 20)
         }
         .background(background.ignoresSafeArea())
-        .sheet(isPresented: $showsAccess) { CaptureAccessView(access: access) }
+        .sheet(isPresented: $showsAccess) { CaptureAccessView(access: access, diagnostics: diagnostics) }
         .onChange(of: model.accessSetupRequested) { _, requested in
             if requested { showsAccess = true; model.accessSetupRequested = false }
         }

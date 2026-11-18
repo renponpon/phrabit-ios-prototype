@@ -106,6 +106,20 @@ const checks = [
     assert.match(recorder, /removeItem\(at: url\)/);
     assert.match(read("App/CaptureViewModel.swift"), /defer \{ self\.recorder\.discard\(recordingURL\) \}/);
   }],
+  ["connection checks are manual, consent-gated, non-saving and reject deployment protection without logging out", () => {
+    const verifier = read("Core/Sources/PhrabitCaptureCore/CaptureConnectionVerifier.swift");
+    assert.match(verifier, /api\/capture\/access/);
+    assert.match(verifier, /request\.httpMethod = "GET"/);
+    assert.match(verifier, /access\.canRecord/);
+    assert.match(verifier, /access\.sessionRevision == revision/);
+    assert.match(verifier, /capture-access-v1/);
+    assert.doesNotMatch(verifier, /httpBody =|transcribe\(|translate\(|print\(|retry/);
+    assert.match(read("App/CaptureAccessView.swift"), /接続を確認（音声を送らない）/);
+    assert.doesNotMatch(read("App/CaptureViewModel.swift"), /diagnostics|CaptureConnectionVerifier|\.verify\(/);
+    assert.match(read("Core/Sources/PhrabitCaptureCore/CaptureHTTPProcessor.swift"), /isCaptureError/);
+    assert.match(read("Core/Sources/PhrabitCaptureCore/CaptureConnectionDiagnostics.swift"), /self\.access\.sessionRevision == revision/);
+    assert.match(read("Core/Tests/PhrabitCaptureCoreTests/CaptureHTTPProcessorTests.swift"), /testProtectedDeploymentDoesNotLookLikeAnExpiredLogin/);
+  }],
   ["language choice persists, with fixed English and Chinese fixtures", () => {
     assert.match(read("App/CaptureViewModel.swift"), /UserDefaults\.standard\.set\(language\.rawValue/);
     const fixtures = read("Core/Sources/PhrabitCaptureCore/MockTranslator.swift");

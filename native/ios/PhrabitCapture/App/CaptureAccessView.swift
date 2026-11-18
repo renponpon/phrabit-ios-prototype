@@ -3,6 +3,7 @@ import SwiftUI
 
 struct CaptureAccessView: View {
     @ObservedObject var access: CaptureAccessController
+    var diagnostics: CaptureConnectionDiagnostics? = nil
     @State private var acknowledged = false
     @Environment(\.dismiss) private var dismiss
 
@@ -48,6 +49,9 @@ struct CaptureAccessView: View {
                 if case .failed(let message) = access.state {
                     Section { Text(message).foregroundStyle(.red) }
                 }
+                if let diagnostics {
+                    CaptureConnectionDiagnosticsView(diagnostics: diagnostics, canCheck: access.canRecord)
+                }
                 Section {
                     Text("設定後はロック画面のPhrabitから録音できます。録音開始前にログイン更新の通信を待ちません。期限切れなどで再ログインが必要な場合は案内します。")
                     NavigationLink("データの取り扱い") {
@@ -69,7 +73,33 @@ struct CaptureAccessView: View {
             .navigationTitle("ログインと送信設定")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("閉じる") { access.cancelSignIn(); dismiss() } } }
             .interactiveDismissDisabled(access.isBusy)
-            .onDisappear { access.cancelSignIn() }
+            .onChange(of: access.sessionRevision) { _, _ in diagnostics?.cancel() }
+            .onDisappear { access.cancelSignIn(); diagnostics?.cancel() }
         }
+    }
+}
+
+private struct CaptureConnectionDiagnosticsView: View {
+    @ObservedObject var diagnostics: CaptureConnectionDiagnostics
+    let canCheck: Bool
+
+    var body: some View {
+        Section {
+            switch diagnostics.state {
+            case .checking:
+                ProgressView("接続を確認中")
+                Button("確認を中止", action: diagnostics.cancel)
+            case .ready:
+                Label("接続確認OK（音声未送信）", systemImage: "checkmark.circle")
+            case .failed(let message):
+                Text(message).foregroundStyle(.red)
+            case .idle:
+                EmptyView()
+            }
+            Button("接続を確認（音声を送らない）", action: diagnostics.run)
+                .disabled(!canCheck || diagnostics.isBusy)
+            Text("認証だけを確認します。録音・翻訳・フレーズ保存・学習日の記録は行いません。録音開始前に自動実行しません。")
+                .font(.footnote)
+        } header: { Text("接続確認") }
     }
 }
