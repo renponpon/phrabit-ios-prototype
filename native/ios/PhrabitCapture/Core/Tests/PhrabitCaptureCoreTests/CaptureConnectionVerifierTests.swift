@@ -193,12 +193,35 @@ final class CaptureConnectionVerifierTests: XCTestCase {
         let owner = try XCTUnwrap(access.userID)
         let client = try CaptureConnectionVerifier(previewAuth: previewConfiguration(), target: .captureEdge, access: access, protocolClasses: [ConnectionCheckStub.self])
         let account = ["id": owner.uuidString, "role": "authenticated"]
-        for data in [try JSONSerialization.data(withJSONObject: account), try Self.success()] {
+        for data in [try JSONSerialization.data(withJSONObject: account), try Self.success(),
+                     try Self.success(changes: ["contract": "capture-audio-preview-v1"])] {
             ConnectionCheckStub.handler = { _ in (200, "application/json", data, nil) }
             do { try await client.verify(); XCTFail("別のAPIを検証用APIとして受け付けました") }
             catch let failure as CaptureConnectionCheckError { if case .invalidResponse = failure {} else { XCTFail("誤ったエラー") } }
         }
         XCTAssertTrue(access.canRecord)
+    }
+
+    func testPreviewAudioProofUsesAPayloadFreeGetAndRejectsMockProof() async throws {
+        let access = signedIn()
+        let configuration = try previewConfiguration()
+        let client = try CaptureConnectionVerifier(previewAuth: configuration, target: .captureAudio, access: access, protocolClasses: [ConnectionCheckStub.self])
+        for contract in ["capture-edge-v1", "capture-audio-preview-v1"] {
+            ConnectionCheckStub.handler = { request in
+                XCTAssertEqual(request.url, configuration.projectURL.appendingPathComponent("functions/v1/phrabit-capture-audio/access"))
+                XCTAssertEqual(request.httpMethod, "GET")
+                XCTAssertNil(request.httpBody)
+                XCTAssertNil(request.httpBodyStream)
+                return (200, "application/json", try Self.success(changes: ["contract": contract]), nil)
+            }
+            do {
+                try await client.verify()
+                XCTAssertEqual(contract, "capture-audio-preview-v1")
+            } catch let failure as CaptureConnectionCheckError {
+                XCTAssertEqual(contract, "capture-edge-v1")
+                if case .invalidResponse = failure {} else { XCTFail("誤ったエラー") }
+            }
+        }
     }
 
     func testPreviewAuthRejectsNonSupabaseHostOrDifferentOrigin() throws {

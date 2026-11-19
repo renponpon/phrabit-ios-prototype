@@ -9,6 +9,7 @@ final class CapturePreviewAuthLaunch: ObservableObject {
         case invalid
         case preview(CaptureAccessController, CaptureConnectionDiagnostics, usesCaptureEdge: Bool)
         case localRecording(CaptureViewModel, CaptureAccessController, CaptureConnectionDiagnostics)
+        case liveAudio(CaptureViewModel, CaptureAccessController, CaptureConnectionDiagnostics)
     }
 
     let mode: Mode
@@ -25,9 +26,14 @@ final class CapturePreviewAuthLaunch: ObservableObject {
             return
         }
         let usesCaptureEdge = settings["ConnectionCheck"] == "capture-edge-v1"
+        #if PHRABIT_LOCAL_LIVE_AUDIO
+        let liveAudio = settings["ConnectionCheck"] == "capture-audio-preview-v1"
+        #else
+        let liveAudio = false
+        #endif
         let localRecordingOnly = usesCaptureEdge && settings["LocalMockRecording"] == "true"
         var expectedKeys: Set<String> = ["ProjectRef", "PublishableKey"]
-        if usesCaptureEdge { expectedKeys.insert("ConnectionCheck") }
+        if usesCaptureEdge || liveAudio { expectedKeys.insert("ConnectionCheck") }
         if localRecordingOnly { expectedKeys.insert("LocalMockRecording") }
         guard Set(settings.keys) == expectedKeys else {
             mode = .invalid
@@ -41,23 +47,33 @@ final class CapturePreviewAuthLaunch: ObservableObject {
             mode = .invalid
             return
         }
-        let storage = CaptureEnvironmentStorage(base: CaptureCredentialStore(), namespace: "preview-auth-only-v1")
+        let storage = CaptureEnvironmentStorage(base: CaptureCredentialStore(), namespace: liveAudio ? "preview-audio-consent-v1" : "preview-auth-only-v1")
         let browser = CaptureBrowserLogin()
         let backend = CaptureSupabaseAuthentication(configuration: configuration, storage: storage, openBrowser: { try await browser.open($0) })
         let access = CaptureAccessController(backend: backend, storage: storage, environmentID: configuration.environmentID,
-                                             allowsVerifiedLocalRecording: localRecordingOnly)
-        guard let verifier = try? CaptureConnectionVerifier(previewAuth: configuration, target: usesCaptureEdge ? .captureEdge : .account, access: access) else {
+                                             allowsVerifiedLocalRecording: localRecordingOnly || liveAudio)
+        let target: CaptureConnectionVerifier.PreviewTarget = liveAudio ? .captureAudio : usesCaptureEdge ? .captureEdge : .account
+        guard let verifier = try? CaptureConnectionVerifier(previewAuth: configuration, target: target, access: access) else {
             mode = .invalid
             return
         }
         let diagnostics = CaptureConnectionDiagnostics(access: access, check: {
             let revision = access.sessionRevision
             try await verifier.verify()
-            if localRecordingOnly { try access.confirmLocalRecording(afterCheckFor: revision) }
+            if localRecordingOnly || liveAudio { try access.confirmLocalRecording(afterCheckFor: revision) }
         })
         if localRecordingOnly {
             let model = CaptureViewModel(processor: MockCaptureProcessor(), recordingAllowed: { access.canRecordLocally })
             mode = .localRecording(model, access, diagnostics)
+        } else if liveAudio {
+            guard let processor = try? CaptureHTTPProcessor(previewAudio: configuration, consentGranted: { access.canRecordLocally },
+                                                            accessToken: { try await access.validAccessToken() }) else {
+                mode = .invalid
+                return
+            }
+            let model = CaptureViewModel(processor: processor, recordingAllowed: { access.canRecordLocally },
+                                         authenticationRequired: { access.clearSession() })
+            mode = .liveAudio(model, access, diagnostics)
         } else {
             mode = .preview(access, diagnostics, usesCaptureEdge: usesCaptureEdge)
         }

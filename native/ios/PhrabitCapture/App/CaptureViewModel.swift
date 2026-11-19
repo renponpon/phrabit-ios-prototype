@@ -28,7 +28,7 @@ final class CaptureViewModel: ObservableObject {
 
     var isMock: Bool { !processor.sendsAudio }
     var canRetryTranslation: Bool {
-        if case .failed = session.state { return recognizedText != nil }
+        if isMock, case .failed = session.state { return recognizedText != nil }
         return false
     }
 
@@ -38,7 +38,14 @@ final class CaptureViewModel: ObservableObject {
         self.authenticationRequired = authenticationRequired
         language = CaptureLanguage(rawValue: UserDefaults.standard.string(forKey: Self.languageKey) ?? "") ?? .chinese
         setupComplete = UserDefaults.standard.bool(forKey: Self.setupKey)
-        recorder.onTimeLimit = { [weak self] in self?.stopAndTranslate() }
+        recorder.onTimeLimit = { [weak self] in
+            guard let self else { return }
+            if self.isMock {
+                self.stopAndTranslate()
+            } else {
+                self.recordingFailed("20秒に達したため録音を破棄しました。音声は送信していません。")
+            }
+        }
         recorder.onInterruption = { [weak self] in
             self?.recordingFailed("通話などで録音が中断されました。もう一度話してください。")
         }
@@ -65,11 +72,13 @@ final class CaptureViewModel: ObservableObject {
             do {
                 try await self.recorder.start(authorized: self.recordingAllowed)
                 guard self.session.operationID == identifier else { return }
-                self.setupComplete = true
-                UserDefaults.standard.set(true, forKey: Self.setupKey)
                 self.recordingStartedAt = Date()
                 self.session.recordingBegan(for: identifier)
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                if !self.setupComplete {
+                    self.setupComplete = true
+                    UserDefaults.standard.set(true, forKey: Self.setupKey)
+                }
             } catch is CancellationError {
             } catch {
                 if !self.recordingAllowed() { self.accessSetupRequested = true }
@@ -92,12 +101,14 @@ final class CaptureViewModel: ObservableObject {
         let targetLanguage = session.language
         let duration = recorder.completedDurationMilliseconds
         operationTask = Task { [weak self] in
+            defer { try? FileManager.default.removeItem(at: recordingURL) }
             guard let self else { return }
-            defer { self.recorder.discard(recordingURL) }
             do {
+                try Task.checkCancellation()
                 let audio: Data
                 if self.processor.sendsAudio {
                     audio = try Data(contentsOf: recordingURL)
+                    try FileManager.default.removeItem(at: recordingURL)
                 } else {
                     self.recorder.discard(recordingURL)
                     audio = Data()
@@ -105,7 +116,6 @@ final class CaptureViewModel: ObservableObject {
                 try Task.checkCancellation()
                 self.uploadMayHaveStarted = self.processor.sendsAudio
                 let text = try await self.processor.transcribe(audio: audio, durationMilliseconds: duration, sessionID: identifier)
-                self.recorder.discard(recordingURL)
                 try Task.checkCancellation()
                 guard self.session.operationID == identifier else { return }
                 guard !text.isEmpty, text.utf16.count <= 500 else { throw CaptureClientError.invalidInput }
@@ -139,7 +149,7 @@ final class CaptureViewModel: ObservableObject {
     }
 
     func retryTranslation() {
-        guard let text = recognizedText, let identifier = session.retryTranslation() else { return }
+        guard isMock, let text = recognizedText, let identifier = session.retryTranslation() else { return }
         let targetLanguage = session.language
         operationTask = Task { [weak self] in
             guard let self else { return }

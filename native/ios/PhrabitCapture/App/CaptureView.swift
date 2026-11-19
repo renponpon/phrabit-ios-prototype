@@ -93,12 +93,12 @@ struct CaptureView: View {
                 Text("翻訳先を選び、下のボタンからマイクを許可してください。設定後はロック画面のPhrabitから録音を開始します。")
                     .font(.body)
             }
-            if localPreview && !access.canRecordLocally {
+            if diagnostics != nil && !access.canRecordLocally {
                 Text("初回は本人確認が必要です。ログインと接続確認を済ませてください。")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-            Text(model.isMock ? "この試作版では録音だけを行います。話した内容にかかわらず、ホテルの固定サンプルを表示します。" : "話した日本語を翻訳します。音声と認識した文章を外部AIへ送信します。")
+            Text(model.isMock ? "この試作版では録音だけを行います。話した内容にかかわらず、ホテルの固定サンプルを表示します。" : "「停止して翻訳」を押すと、音声と認識した文章を外部AIへ送信します。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Button(localPreview ? "ログインと接続確認" : model.isMock ? "ログインと送信設定を確認（模擬）" : "ログインと送信設定") { showsAccess = true }
@@ -144,7 +144,7 @@ struct CaptureView: View {
                         .foregroundStyle(mint)
                 }
             }
-            Text("話し終えたら停止してください。20秒で自動停止します。")
+            Text(model.isMock ? "話し終えたら停止してください。20秒で自動停止します。" : "20秒以内に「停止して翻訳」を押してください。時間切れの場合、音声は送信しません。")
                 .foregroundStyle(.secondary)
         case .recognizing, .translating:
             Text(model.isMock ? "模擬結果を準備中" : model.session.state == .recognizing ? "音声を認識中" : "翻訳中")

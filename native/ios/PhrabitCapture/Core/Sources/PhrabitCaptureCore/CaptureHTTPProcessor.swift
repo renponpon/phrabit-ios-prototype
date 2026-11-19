@@ -10,6 +10,8 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
     private let session: URLSession
     private let accessToken: () async throws -> String
     private let consentGranted: () -> Bool
+    private let route: String
+    private let previewKey: String?
 
     public init(origin: URL, protocolClasses: [AnyClass]? = nil, consentGranted: @escaping () -> Bool, accessToken: @escaping () async throws -> String) throws {
         guard origin.scheme == "https", origin.host != nil, origin.user == nil, origin.password == nil,
@@ -20,6 +22,23 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
         self.session = Self.makeSession(protocolClasses: protocolClasses)
         self.consentGranted = consentGranted
         self.accessToken = accessToken
+        self.route = "api/capture"
+        self.previewKey = nil
+    }
+
+    public init(previewAudio configuration: CaptureAuthConfiguration, protocolClasses: [AnyClass]? = nil, consentGranted: @escaping () -> Bool, accessToken: @escaping () async throws -> String) throws {
+        let project = configuration.projectURL
+        guard project == configuration.apiOrigin, project.port == nil,
+              project.host?.range(of: #"^[a-z]{20}\.supabase\.co$"#, options: .regularExpression) != nil,
+              configuration.publishableKey.range(of: #"^sb_publishable_[A-Za-z0-9_-]{20,150}$"#, options: .regularExpression) != nil else {
+            throw CaptureClientError.invalidConfiguration
+        }
+        self.origin = project
+        self.session = Self.makeSession(protocolClasses: protocolClasses)
+        self.consentGranted = consentGranted
+        self.accessToken = accessToken
+        self.route = "functions/v1/phrabit-capture-audio"
+        self.previewKey = configuration.publishableKey
     }
 
     static func makeSession(protocolClasses: [AnyClass]? = nil, timeout: TimeInterval = 45) -> URLSession {
@@ -47,7 +66,7 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
         append("--\(boundary)\r\nContent-Disposition: form-data; name=\"audio\"; filename=\"recording.m4a\"\r\nContent-Type: audio/mp4\r\n\r\n")
         body.append(audio)
         append("\r\n--\(boundary)--\r\n")
-        let data = try await send(path: "api/capture/transcribe", body: body, contentType: "multipart/form-data; boundary=\(boundary)")
+        let data = try await send(stage: "transcribe", body: body, contentType: "multipart/form-data; boundary=\(boundary)")
         guard let result = try? JSONDecoder().decode(TranscriptResponse.self, from: data),
               UUID(uuidString: result.sessionId) == sessionID, UUID(uuidString: result.requestId) != nil,
               result.language == "ja", !result.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -59,7 +78,7 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
         let source = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !source.isEmpty, source.utf16.count <= 500 else { throw CaptureClientError.invalidInput }
         let body = try JSONEncoder().encode(TranslationRequest(sessionId: sessionID.uuidString, sourceText: source, targetLanguage: language.rawValue))
-        let data = try await send(path: "api/capture/translate", body: body, contentType: "application/json")
+        let data = try await send(stage: "translate", body: body, contentType: "application/json")
         guard let result = try? JSONDecoder().decode(TranslationResponse.self, from: data),
               UUID(uuidString: result.sessionId) == sessionID, UUID(uuidString: result.requestId) != nil,
               result.sourceText == source, result.targetLanguage == language.rawValue,
@@ -73,7 +92,7 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
         return CaptureTranslation(sourceText: source, targetText: result.targetText, reading: result.reading, language: language)
     }
 
-    private func send(path: String, body: Data, contentType: String) async throws -> Data {
+    private func send(stage: String, body: Data, contentType: String) async throws -> Data {
         try Task.checkCancellation()
         guard consentGranted() else { throw CaptureClientError.unavailable }
         let token: String
@@ -86,17 +105,18 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
         guard !token.isEmpty, token.count <= 8192, !token.contains(where: { $0.isWhitespace || $0.isNewline }) else { throw CaptureClientError.authenticationRequired }
         try Task.checkCancellation()
         guard consentGranted() else { throw CaptureClientError.unavailable }
-        var request = URLRequest(url: origin.appendingPathComponent(path), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 45)
+        let destination = origin.appendingPathComponent("\(route)/\(stage)")
+        var request = URLRequest(url: destination, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 45)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let previewKey { request.setValue(previewKey, forHTTPHeaderField: "apikey") }
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.httpBody = body
         do {
             let (data, response) = try await session.data(for: request)
             try Task.checkCancellation()
-            guard let response = response as? HTTPURLResponse, response.url?.host == origin.host,
-                  response.url?.scheme == origin.scheme, response.url?.port == origin.port else { throw CaptureClientError.invalidResponse }
+            guard let response = response as? HTTPURLResponse, response.url == destination else { throw CaptureClientError.invalidResponse }
             switch response.statusCode {
             case 200:
                 guard data.count <= 131_072, response.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("application/json") == true else { throw CaptureClientError.invalidResponse }

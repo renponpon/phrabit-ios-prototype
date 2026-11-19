@@ -104,7 +104,7 @@ const checks = [
     assert.match(recorder, /record\(forDuration: CaptureSession\.maximumRecordingDuration\)/);
     assert.match(recorder, /FileProtectionType\.complete/);
     assert.match(recorder, /removeItem\(at: url\)/);
-    assert.match(read("App/CaptureViewModel.swift"), /defer \{ self\.recorder\.discard\(recordingURL\) \}/);
+    assert.match(read("App/CaptureViewModel.swift"), /defer \{ try\? FileManager\.default\.removeItem\(at: recordingURL\) \}/);
   }],
   ["connection checks are manual, consent-gated, non-saving and reject deployment protection without logging out", () => {
     const verifier = read("Core/Sources/PhrabitCaptureCore/CaptureConnectionVerifier.swift");
@@ -140,12 +140,27 @@ const checks = [
     assert.match(verifier, /auth\/v1\/user/);
     assert.match(verifier, /functions\/v1\/phrabit-capture-check/);
     assert.match(verifier, /capture-edge-v1/);
-    assert.doesNotMatch(preview, /AudioRecorder|CaptureLiveConnection|CaptureHTTPProcessor|\/api\/capture/);
+    assert.doesNotMatch(preview, /AudioRecorder|\/api\/capture/);
     assert.doesNotMatch(read("project.yml"), /PhrabitPreviewAuthOnly/);
     assert.match(distribution, /Approved isolated Preview project only/);
     assert.match(distribution, /testFlightInternalTestingOnly = true/);
     assert.match(workflow, /preview_auth_only:[\s\S]*?default: false/);
     assert.match(workflow, /preview_capture_check:[\s\S]*?default: false/);
+  }],
+  ["local live audio requires an explicit compile flag, a different consent namespace and sealed signing defaults", () => {
+    const preview = read("App/CapturePreviewAuthView.swift");
+    const processor = read("Core/Sources/PhrabitCaptureCore/CaptureHTTPProcessor.swift");
+    const distribution = readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8");
+    const workflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
+    assert.match(preview, /#if PHRABIT_LOCAL_LIVE_AUDIO\s+let liveAudio = settings\["ConnectionCheck"\] == "capture-audio-preview-v1"\s+#else\s+let liveAudio = false/);
+    assert.match(preview, /liveAudio \? "preview-audio-consent-v1" : "preview-auth-only-v1"/);
+    assert.match(preview, /else if liveAudio \{\s+guard let processor = try\? CaptureHTTPProcessor\(previewAudio:/);
+    assert.match(processor, /project == configuration\.apiOrigin/);
+    assert.match(processor, /response\.url == destination/);
+    assert.doesNotMatch(processor, /x-vercel-protection-bypass/);
+    for (const settings of [distribution, workflow, read("project.yml")]) {
+      assert.doesNotMatch(settings, /PHRABIT_LOCAL_LIVE_AUDIO|capture-audio-preview-v1/);
+    }
   }],
   ["opt-in Preview recording requires proof, retains no audio, and uses a fresh lock-screen request", () => {
     const preview = read("App/CapturePreviewAuthView.swift");
@@ -156,7 +171,7 @@ const checks = [
     assert.match(preview, /try await verifier\.verify\(\)[\s\S]*?confirmLocalRecording\(afterCheckFor: revision\)/);
     assert.match(preview, /CaptureViewModel\(processor: MockCaptureProcessor\(\), recordingAllowed: \{ access\.canRecordLocally \}\)/);
     assert.match(access, /canRecord && userID == localRecordingOwner/);
-    assert.match(model, /if self\.processor\.sendsAudio \{\s+audio = try Data\(contentsOf: recordingURL\)\s+\} else \{\s+self\.recorder\.discard\(recordingURL\)\s+audio = Data\(\)/);
+    assert.match(model, /if self\.processor\.sendsAudio \{\s+audio = try Data\(contentsOf: recordingURL\)\s+try FileManager\.default\.removeItem\(at: recordingURL\)\s+\} else \{\s+self\.recorder\.discard\(recordingURL\)\s+audio = Data\(\)/);
     assert.match(read("App/AudioRecorder.swift"), /guard authorized\(\)/);
     assert.match(read("Shared/CaptureLaunchRequest.swift"), /\(0\.\.\.30\)\.contains\(age\)/);
     assert.match(workflow, /preview_mock_recording:[\s\S]*?default: false/);

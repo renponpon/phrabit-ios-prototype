@@ -107,6 +107,45 @@ final class CaptureHTTPProcessorTests: XCTestCase {
         }
     }
 
+    func testPreviewAudioUsesSameProjectAndOnlyThePublishableKey() async throws {
+        let sessionID = identifier
+        let project = URL(string: "https://abcdefghijklmnopqrst.supabase.co")!
+        let key = "sb_publishable_synthetic_testing_key"
+        let configuration = try CaptureAuthConfiguration(apiOrigin: project, projectURL: project, publishableKey: key)
+        var calls = 0
+        CaptureStubProtocol.handler = { request in
+            calls += 1
+            XCTAssertEqual(request.url?.host, project.host)
+            XCTAssertEqual(request.url?.path, "/functions/v1/phrabit-capture-audio/transcribe")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "apikey"), key)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-session")
+            XCTAssertNil(request.value(forHTTPHeaderField: "x-vercel-protection-bypass"))
+            let data = try JSONSerialization.data(withJSONObject: ["sessionId": sessionID.uuidString, "requestId": UUID().uuidString, "transcript": "こんにちは", "language": "ja"])
+            return (200, data)
+        }
+        let processor = try CaptureHTTPProcessor(previewAudio: configuration, protocolClasses: [CaptureStubProtocol.self], consentGranted: { true }, accessToken: { "test-session" })
+        let transcript = try await processor.transcribe(audio: Data([1, 2, 3]), durationMilliseconds: 1000, sessionID: identifier)
+        XCTAssertEqual(transcript, "こんにちは")
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testConsentWithdrawnWhileGettingTokenBlocksAudio() async throws {
+        var consent = true
+        var calls = 0
+        CaptureStubProtocol.handler = { _ in calls += 1; return (500, Data()) }
+        let processor = try CaptureHTTPProcessor(origin: URL(string: "https://preview.invalid")!, protocolClasses: [CaptureStubProtocol.self], consentGranted: { consent }, accessToken: {
+            consent = false
+            return "test-session"
+        })
+        do {
+            _ = try await processor.transcribe(audio: Data([1, 2, 3]), durationMilliseconds: 1000, sessionID: identifier)
+            XCTFail("同意取り消し後に音声を送信しました")
+        } catch let error as CaptureClientError {
+            if case .unavailable = error {} else { XCTFail("同意取り消しを検出できませんでした") }
+        }
+        XCTAssertEqual(calls, 0)
+    }
+
     func testProtectedDeploymentDoesNotLookLikeAnExpiredLogin() async throws {
         defer { CaptureStubProtocol.responseHeaders = nil }
         for status in [302, 401, 403] {

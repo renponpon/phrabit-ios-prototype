@@ -19,7 +19,7 @@ public enum CaptureConnectionCheckError: LocalizedError {
 
 @MainActor
 public final class CaptureConnectionVerifier {
-    public enum PreviewTarget { case account, captureEdge }
+    public enum PreviewTarget { case account, captureEdge, captureAudio }
 
     private let endpoint: URL
     private let session: URLSession
@@ -49,6 +49,9 @@ public final class CaptureConnectionVerifier {
         case .captureEdge:
             self.endpoint = project.appendingPathComponent("functions/v1/phrabit-capture-check")
             self.responseContract = "capture-edge-v1"
+        case .captureAudio:
+            self.endpoint = project.appendingPathComponent("functions/v1/phrabit-capture-audio/access")
+            self.responseContract = "capture-audio-preview-v1"
         }
         self.access = access
         self.session = CaptureHTTPProcessor.makeSession(protocolClasses: protocolClasses, timeout: 10)

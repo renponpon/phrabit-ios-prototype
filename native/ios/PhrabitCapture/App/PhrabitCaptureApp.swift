@@ -20,6 +20,8 @@ struct PhrabitCaptureApp: App {
                     .preferredColorScheme(.dark)
             case .localRecording(let model, let access, let diagnostics):
                 recordingView(model: model, access: access, diagnostics: diagnostics, localPreview: true)
+            case .liveAudio(let model, let access, let diagnostics):
+                recordingView(model: model, access: access, diagnostics: diagnostics)
             }
         }
     }
