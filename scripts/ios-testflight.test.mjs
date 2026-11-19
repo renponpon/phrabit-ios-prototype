@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
-import { approvedPreviewProjectDigest, classifyCommandFailure, distributionSpec, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
+import { fileURLToPath } from 'node:url';
+import { approvedPreviewProjectDigest, assertTestFlightUploadAllowed, classifyCommandFailure, distributionSpec, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
 
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
@@ -142,4 +146,69 @@ test('auth-only manifest declares linked account fields, not tracking or audio',
     ['NSPrivacyCollectedDataTypeName', 'NSPrivacyCollectedDataTypeEmailAddress', 'NSPrivacyCollectedDataTypeUserID']);
   assert.ok(categories.every(value => value.NSPrivacyCollectedDataTypeLinked && !value.NSPrivacyCollectedDataTypeTracking &&
     value.NSPrivacyCollectedDataTypePurposes.join() === 'NSPrivacyCollectedDataTypePurposeAppFunctionality'));
+});
+
+test('audio pilot archive is opt-in, requires isolated Preview auth and excludes older modes', () => {
+  const flag = { IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'true' };
+  assert.throws(() => previewAuthSettings(flag), /requires Preview auth-only mode/);
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'yes' }), /Invalid audio pilot archive mode/);
+  for (const other of ['IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
+    assert.throws(() => previewAuthSettings({ ...flag, IOS_PREVIEW_AUTH_ONLY: 'true', [other]: 'true' }), /excludes other capture modes/);
+  }
+  assert.throws(() => previewAuthSettings({ ...flag, IOS_PREVIEW_AUTH_ONLY: 'true', IOS_PREVIEW_PROJECT_REF: 'abcdefghijklmnopqrst' }), /Approved isolated Preview project only/);
+});
+
+test('signed audio pilot uses an app-target Release flag and describes when voice is shared', () => {
+  const settings = { ProjectRef: 'abcdefghijklmnopqrst', PublishableKey: 'sb_publishable_synthetic_example_key', ConnectionCheck: 'capture-audio-pilot-v1' };
+  const template = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', settings);
+  const app = template.targets.PhrabitCapture;
+  const control = template.targets.PhrabitCaptureControl;
+  assert.deepEqual(app.info.properties.PhrabitPreviewAuthOnly, settings);
+  assert.match(app.info.properties.NSMicrophoneUsageDescription, /停止して翻訳.*録音をOpenAI.*認識した文章をGoogle Gemini/);
+  assert.deepEqual(app.settings.configs, { Release: { SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) PHRABIT_LOCAL_LIVE_AUDIO' } });
+  assert.equal(template.settings.configs, undefined);
+  assert.equal(control.settings.configs, undefined);
+  assert.equal(control.info.properties.PhrabitPreviewAuthOnly, undefined);
+  assert.equal(app.info.properties.ITSAppUsesNonExemptEncryption, undefined);
+  assert.throws(() => distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', { ...settings, LocalMockRecording: 'true' }), /excludes local mock/);
+});
+
+test('audio pilot draft includes retained text and usage metadata for functionality, without tracking', () => {
+  const settings = { ConnectionCheck: 'capture-audio-pilot-v1' };
+  const categories = previewAuthPrivacyCategories(settings);
+  assert.deepEqual(categories.slice(0, 3), previewAuthPrivacyCategories());
+  assert.deepEqual(categories.slice(3).map(value => value.NSPrivacyCollectedDataType),
+    ['NSPrivacyCollectedDataTypeOtherUserContent', 'NSPrivacyCollectedDataTypeProductInteraction']);
+  assert.ok(categories.every(value => value.NSPrivacyCollectedDataTypeLinked && !value.NSPrivacyCollectedDataTypeTracking &&
+    value.NSPrivacyCollectedDataTypePurposes.join() === 'NSPrivacyCollectedDataTypePurposeAppFunctionality'));
+});
+
+test('the runner skips Apple upload and script denies it before reading credentials', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only \}\}/);
+  assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
+  for (const unapproved of [true, undefined, 'false', null]) {
+    assert.throws(() => assertTestFlightUploadAllowed({ audioPilotArchiveOnly: unapproved }), /archive-only/);
+  }
+  assert.doesNotThrow(() => assertTestFlightUploadAllowed({ audioPilotArchiveOnly: false }));
+});
+
+test('direct upload command rejects a pilot even without access to its package or Apple credentials', () => {
+  const runner = mkdtempSync(path.join(tmpdir(), 'phrabit-pilot-upload-test-'));
+  const privateDirectory = path.join(runner, 'phrabit-testflight');
+  const statePath = path.join(privateDirectory, 'state.json');
+  try {
+    mkdirSync(privateDirectory);
+    writeFileSync(statePath, JSON.stringify({ audioPilotArchiveOnly: true }));
+    const script = fileURLToPath(new URL('./ios-testflight.mjs', import.meta.url));
+    const result = spawnSync(process.execPath, [script, 'upload'], {
+      env: { ...approved, RUNNER_TEMP: runner }, encoding: 'utf8', timeout: 5_000,
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /archive-only and cannot be uploaded/);
+  } finally {
+    unlinkSync(statePath);
+    rmdirSync(privateDirectory);
+    rmdirSync(runner);
+  }
 });

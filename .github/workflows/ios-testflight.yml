@@ -8,12 +8,12 @@ on:
         type: string
         required: true
       confirm_internal_only:
-        description: 本人だけの内部TestFlight配布を承認済み（一般公開・AI接続なし）
+        description: 本人限定の署名検証または内部配布を承認済み（一般公開・AI接続なし）
         type: boolean
         required: true
         default: false
       preview_auth_only:
-        description: 検証用Googleログイン・接続確認だけ（録音・翻訳不可）
+        description: 検証用Googleログインと接続確認（録音は別オプション）
         type: boolean
         required: true
         default: false
@@ -31,6 +31,11 @@ on:
         description: 新経路の接続確認だけ（preview_auth_only必須、旧接続確認・録音はOFF）
         type: boolean
         required: true
+        default: false
+      preview_audio_pilot_archive_only:
+        description: 音声候補の署名と書き出しだけ（preview_auth_only必須、Appleアップロードなし）
+        type: boolean
+        required: false
         default: false
 
 permissions:
@@ -74,6 +79,7 @@ jobs:
           IOS_PREVIEW_CAPTURE_CHECK: ${{ inputs.preview_capture_check }}
           IOS_PREVIEW_MOCK_RECORDING: ${{ inputs.preview_mock_recording }}
           IOS_PREVIEW_AUDIO_ACCESS_ONLY: ${{ inputs.preview_audio_access_only }}
+          IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: ${{ inputs.preview_audio_pilot_archive_only }}
           IOS_PREVIEW_PROJECT_REF: ${{ secrets.IOS_PREVIEW_PROJECT_REF }}
           IOS_PREVIEW_PUBLISHABLE_KEY: ${{ secrets.IOS_PREVIEW_PUBLISHABLE_KEY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -85,6 +91,7 @@ jobs:
       - name: Build and verify signed iPhone archive
         run: node scripts/ios-testflight.mjs build
       - name: Upload to App Store Connect for internal testing
+        if: ${{ !inputs.preview_audio_pilot_archive_only }}
         env:
           ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}

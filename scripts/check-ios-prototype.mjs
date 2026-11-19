@@ -147,7 +147,7 @@ const checks = [
     assert.match(workflow, /preview_auth_only:[\s\S]*?default: false/);
     assert.match(workflow, /preview_capture_check:[\s\S]*?default: false/);
   }],
-  ["local live audio requires an explicit compile flag, a different consent namespace and sealed signing defaults", () => {
+  ["audio pilot requires an explicit compile flag, separate consent and a non-uploading archive mode", () => {
     const preview = read("App/CapturePreviewAuthView.swift");
     const processor = read("Core/Sources/PhrabitCaptureCore/CaptureHTTPProcessor.swift");
     const distribution = readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8");
@@ -159,9 +159,13 @@ const checks = [
     assert.match(processor, /project == configuration\.apiOrigin/);
     assert.match(processor, /response\.url == destination/);
     assert.doesNotMatch(processor, /x-vercel-protection-bypass/);
-    for (const settings of [distribution, workflow, read("project.yml")]) {
+    for (const settings of [workflow, read("project.yml")]) {
       assert.doesNotMatch(settings, /PHRABIT_LOCAL_LIVE_AUDIO|capture-audio-(preview|pilot)-v1/);
     }
+    assert.match(workflow, /preview_audio_pilot_archive_only:[\s\S]*?default: false/);
+    assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only \}\}/);
+    assert.match(distribution, /if \(state\.audioPilotArchiveOnly\) options\.destination = 'export'/);
+    assert.match(distribution, /stage === 'upload'\) \{\s+const state = readState\(\);\s+assertTestFlightUploadAllowed\(state\);/);
   }],
   ["new-path diagnostics only visits the authenticated GET and cannot queue a recording", () => {
     const app = read("App/PhrabitCaptureApp.swift");
