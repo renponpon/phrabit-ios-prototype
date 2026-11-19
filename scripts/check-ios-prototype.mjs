@@ -186,7 +186,8 @@ const checks = [
     const access = read("Core/Sources/PhrabitCaptureCore/CaptureAccess.swift");
     const preview = read("App/CapturePreviewAuthView.swift");
     assert.match(workflow, /compile_audio_pilot:[\s\S]*?default: false/);
-    assert.match(workflow, /if: \$\{\{ inputs\.compile_audio_pilot \}\}[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?PHRABIT_LOCAL_LIVE_AUDIO[\s\S]*?extract PhrabitPreviewAuthOnly/);
+    assert.match(workflow, /if: \$\{\{ inputs\.compile_audio_pilot \}\}[\s\S]*?targets:\s+PhrabitCapture:\s+settings:\s+configs:\s+Debug:\s+SWIFT_ACTIVE_COMPILATION_CONDITIONS: '\$\(inherited\) PHRABIT_LOCAL_LIVE_AUDIO'[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?extract PhrabitPreviewAuthOnly/);
+    assert.doesNotMatch(workflow, /SWIFT_ACTIVE_COMPILATION_CONDITIONS=/);
     assert.doesNotMatch(workflow, /\bsecrets\./);
     assert.match(preview, /try await verifier\.verifyAudioPilot\(\)\s+try access\.confirmLocalRecording\(afterCheckFor: revision, until: deadline\)/);
     assert.match(preview, /requiresPilotDeadline: liveAudio/);

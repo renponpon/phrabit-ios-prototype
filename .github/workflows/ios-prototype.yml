@@ -110,26 +110,6 @@ jobs:
           ]);
           process.stdout.write('All four interface orientations are declared.\n');
           NODE
-      - name: Compile the audio pilot branch without connecting or signing
-        if: ${{ inputs.compile_audio_pilot }}
-        working-directory: native/ios/PhrabitCapture
-        run: |
-          xcodebuild \
-            -project PhrabitCapture.xcodeproj \
-            -scheme PhrabitCapture \
-            -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build/PilotDerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            'SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG PHRABIT_LOCAL_LIVE_AUDIO' \
-            build
-          info=build/PilotDerivedData/Build/Products/Debug-iphonesimulator/PhrabitCapture.app/Info.plist
-          test -f "$info"
-          plutil -lint "$info"
-          if plutil -extract PhrabitPreviewAuthOnly json -o /dev/null "$info" 2>/dev/null; then
-            echo 'The unsigned pilot compile must not contain connection settings.'
-            exit 1
-          fi
       - name: Build unsigned iPhone archive
         working-directory: native/ios/PhrabitCapture
         run: |
@@ -174,4 +154,36 @@ jobs:
           assert.deepEqual(revisions(xcode), revisions(core));
           process.stdout.write('Xcode and tested Core dependency revisions match.\n');
           NODE
+      - name: Compile the audio pilot branch without connecting or signing
+        if: ${{ inputs.compile_audio_pilot }}
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          cat > pilot-build.yml <<'YAML'
+          include: [project.yml]
+          targets:
+            PhrabitCapture:
+              settings:
+                configs:
+                  Debug:
+                    SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) PHRABIT_LOCAL_LIVE_AUDIO'
+          YAML
+          xcodegen generate --spec pilot-build.yml
+          mkdir -p PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          cp Core/Package.resolved PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          xcodebuild \
+            -project PhrabitCapture.xcodeproj \
+            -scheme PhrabitCapture \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            -onlyUsePackageVersionsFromResolvedFile \
+            build
+          info=build/DerivedData/Build/Products/Debug-iphonesimulator/PhrabitCapture.app/Info.plist
+          test -f "$info"
+          plutil -lint "$info"
+          if plutil -extract PhrabitPreviewAuthOnly json -o /dev/null "$info" 2>/dev/null; then
+            echo 'The unsigned pilot compile must not contain connection settings.'
+            exit 1
+          fi
 
