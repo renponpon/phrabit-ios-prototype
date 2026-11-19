@@ -163,9 +163,11 @@ const checks = [
       assert.doesNotMatch(settings, /PHRABIT_LOCAL_LIVE_AUDIO|capture-audio-(preview|pilot)-v1/);
     }
     assert.match(workflow, /preview_audio_pilot_archive_only:[\s\S]*?default: false/);
-    assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only \}\}/);
-    assert.match(distribution, /if \(state\.audioPilotArchiveOnly\) options\.destination = 'export'/);
-    assert.match(distribution, /stage === 'upload'\) \{\s+const state = readState\(\);\s+assertTestFlightUploadAllowed\(state\);/);
+    assert.match(workflow, /preview_audio_pilot_upload_internal:[\s\S]*?default: false/);
+    assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only && !inputs\.preview_audio_pilot_upload_internal \}\}/);
+    assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.preview_audio_pilot_upload_internal && !inputs\.preview_audio_pilot_archive_only && inputs\.confirm_audio_pilot_no_auto_distribution \}\}/);
+    assert.match(distribution, /if \(pilotMode\) options\.destination = 'export'/);
+    assert.match(distribution, /stage === 'upload' \|\| stage === 'upload-audio-pilot'\) \{\s+const state = readState\(\);\s+assertTestFlightUploadAllowed\(state, stage === 'upload-audio-pilot'\);/);
   }],
   ["new-path diagnostics only visits the authenticated GET and cannot queue a recording", () => {
     const app = read("App/PhrabitCaptureApp.swift");

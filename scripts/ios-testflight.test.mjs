@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { approvedPreviewProjectDigest, assertTestFlightUploadAllowed, classifyCommandFailure, distributionSpec, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
+import { approvedPreviewProjectDigest, assertTestFlightUploadAllowed, audioPilotMode, classifyCommandFailure, dependencyRevisions, distributionSpec, inspectEncryptionEvidence, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
 
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
@@ -151,7 +151,7 @@ test('auth-only manifest declares linked account fields, not tracking or audio',
 test('audio pilot archive is opt-in, requires isolated Preview auth and excludes older modes', () => {
   const flag = { IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'true' };
   assert.throws(() => previewAuthSettings(flag), /requires Preview auth-only mode/);
-  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'yes' }), /Invalid audio pilot archive mode/);
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'yes' }), /Invalid audio pilot mode/);
   for (const other of ['IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
     assert.throws(() => previewAuthSettings({ ...flag, IOS_PREVIEW_AUTH_ONLY: 'true', [other]: 'true' }), /excludes other capture modes/);
   }
@@ -185,12 +185,13 @@ test('audio pilot draft includes retained text and usage metadata for functional
 
 test('the runner skips Apple upload and script denies it before reading credentials', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only \}\}/);
+  assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only && !inputs\.preview_audio_pilot_upload_internal \}\}/);
+  assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.preview_audio_pilot_upload_internal && !inputs\.preview_audio_pilot_archive_only && inputs\.confirm_audio_pilot_no_auto_distribution \}\}/);
   assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
-  for (const unapproved of [true, undefined, 'false', null]) {
-    assert.throws(() => assertTestFlightUploadAllowed({ audioPilotArchiveOnly: unapproved }), /archive-only/);
+  for (const unapproved of ['archive', 'internal-upload', undefined, false]) {
+    assert.throws(() => assertTestFlightUploadAllowed({ audioPilotMode: unapproved }, false), /Ordinary upload cannot submit/);
   }
-  assert.doesNotThrow(() => assertTestFlightUploadAllowed({ audioPilotArchiveOnly: false }));
+  assert.doesNotThrow(() => assertTestFlightUploadAllowed({ audioPilotMode: null }, false));
 });
 
 test('direct upload command rejects a pilot even without access to its package or Apple credentials', () => {
@@ -199,16 +200,64 @@ test('direct upload command rejects a pilot even without access to its package o
   const statePath = path.join(privateDirectory, 'state.json');
   try {
     mkdirSync(privateDirectory);
-    writeFileSync(statePath, JSON.stringify({ audioPilotArchiveOnly: true }));
+    writeFileSync(statePath, JSON.stringify({ audioPilotMode: 'archive' }));
     const script = fileURLToPath(new URL('./ios-testflight.mjs', import.meta.url));
-    const result = spawnSync(process.execPath, [script, 'upload'], {
-      env: { ...approved, RUNNER_TEMP: runner }, encoding: 'utf8', timeout: 5_000,
-    });
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /archive-only and cannot be uploaded/);
+    for (const [stage, message] of [
+      ['upload', /Ordinary upload cannot submit/],
+      ['upload-audio-pilot', /Explicit internal audio pilot upload mode required/]
+    ]) {
+      const result = spawnSync(process.execPath, [script, stage], {
+        env: { ...approved, RUNNER_TEMP: runner }, encoding: 'utf8', timeout: 5_000,
+      });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, message);
+    }
   } finally {
     unlinkSync(statePath);
     rmdirSync(privateDirectory);
     rmdirSync(runner);
   }
+});
+
+test('pilot upload is distinct from archive-only and requires an independent group check', () => {
+  const archive = { IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'true' };
+  const upload = { IOS_PREVIEW_AUDIO_PILOT_UPLOAD_INTERNAL: 'true' };
+  const groupCheck = { IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: 'true' };
+  assert.equal(audioPilotMode({}), null);
+  assert.equal(audioPilotMode(archive), 'archive');
+  assert.equal(audioPilotMode({ ...upload, ...groupCheck }), 'internal-upload');
+  assert.throws(() => audioPilotMode(upload), /automatic distribution check/);
+  assert.throws(() => audioPilotMode(groupCheck), /automatic distribution check/);
+  assert.throws(() => audioPilotMode({ ...archive, ...upload, ...groupCheck }), /mutually exclusive/);
+  assert.throws(() => previewAuthSettings({ ...upload, ...groupCheck }), /requires Preview auth-only mode/);
+});
+
+test('pilot submission requires a completed binary check on the exact pilot build mode', () => {
+  const validated = { audioPilotMode: 'internal-upload', previewAuthOnly: true, audioPilotInspectionPassed: true };
+  assert.doesNotThrow(() => assertTestFlightUploadAllowed(validated, true));
+  assert.throws(() => assertTestFlightUploadAllowed({ ...validated, audioPilotMode: 'archive' }, true), /Explicit internal/);
+  assert.throws(() => assertTestFlightUploadAllowed({ ...validated, audioPilotInspectionPassed: false }, true), /completed binary check/);
+  assert.throws(() => assertTestFlightUploadAllowed({ ...validated, previewAuthOnly: false }, true), /isolated Preview/);
+});
+
+test('binary inspection accepts Apple platform links and identifies encryption evidence without asserting exemption', () => {
+  const libraryList = (...names) => 'PhrabitCapture:\n' + names.map(name => `\t${name} (compatibility version 1.0.0, current version 1.0.0)`).join('\n');
+  const crypto = '/System/Library/Frameworks/CryptoKit.framework/CryptoKit';
+  const swift = '@rpath/libswift_Concurrency.dylib';
+  assert.equal(inspectEncryptionEvidence(libraryList(crypto, swift, '/usr/lib/libSystem.B.dylib'), '                 (undefined) external _SecItemCopyMatching'), true);
+  assert.equal(inspectEncryptionEvidence(libraryList(swift), ''), false);
+  assert.throws(() => inspectEncryptionEvidence('Malformed output', ''), /Unable to identify linked libraries/);
+  assert.throws(() => inspectEncryptionEvidence(libraryList(crypto, '@rpath/Unknown.framework/Unknown'), ''), /unreviewed embedded library/);
+  for (const symbol of ['_CCryptoBoringSSL_EVP_PKEY_new', '                  (undefined) external _SSL_new', '00000001501 t _$s5CXKCPFunction']) {
+    assert.throws(() => inspectEncryptionEvidence(libraryList(crypto), symbol), /Third-party cryptography indicators/);
+  }
+});
+
+test('dependency evidence detects revision changes and rejects missing pins', () => {
+  const pinned = { identity: 'synthetic-crypto', state: { revision: 'a'.repeat(40), version: '1.2.3' } };
+  const serialize = (...pins) => JSON.stringify({ pins });
+  assert.deepEqual(dependencyRevisions(serialize(pinned)), [['synthetic-crypto', 'a'.repeat(40), '1.2.3']]);
+  assert.notDeepEqual(dependencyRevisions(serialize({ ...pinned, state: { ...pinned.state, revision: 'b'.repeat(40) } })),
+    dependencyRevisions(serialize(pinned)));
+  assert.throws(() => dependencyRevisions(serialize()), /Missing locked dependency revisions/);
 });

@@ -37,6 +37,16 @@ on:
         type: boolean
         required: false
         default: false
+      preview_audio_pilot_upload_internal:
+        description: 本人用の実音声版をAppleに提出（別承認・内部限定、配布追加なし）
+        type: boolean
+        required: false
+        default: false
+      confirm_audio_pilot_no_auto_distribution:
+        description: 本人用実音声の提出前に、内部グループの自動配布なしを確認済み
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -80,6 +90,8 @@ jobs:
           IOS_PREVIEW_MOCK_RECORDING: ${{ inputs.preview_mock_recording }}
           IOS_PREVIEW_AUDIO_ACCESS_ONLY: ${{ inputs.preview_audio_access_only }}
           IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: ${{ inputs.preview_audio_pilot_archive_only }}
+          IOS_PREVIEW_AUDIO_PILOT_UPLOAD_INTERNAL: ${{ inputs.preview_audio_pilot_upload_internal }}
+          IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: ${{ inputs.confirm_audio_pilot_no_auto_distribution }}
           IOS_PREVIEW_PROJECT_REF: ${{ secrets.IOS_PREVIEW_PROJECT_REF }}
           IOS_PREVIEW_PUBLISHABLE_KEY: ${{ secrets.IOS_PREVIEW_PUBLISHABLE_KEY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -91,12 +103,19 @@ jobs:
       - name: Build and verify signed iPhone archive
         run: node scripts/ios-testflight.mjs build
       - name: Upload to App Store Connect for internal testing
-        if: ${{ !inputs.preview_audio_pilot_archive_only }}
+        if: ${{ !inputs.preview_audio_pilot_archive_only && !inputs.preview_audio_pilot_upload_internal }}
         env:
           ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: node scripts/ios-testflight.mjs upload
+      - name: Submit audio pilot build to Apple for internal testing only
+        if: ${{ inputs.preview_audio_pilot_upload_internal && !inputs.preview_audio_pilot_archive_only && inputs.confirm_audio_pilot_no_auto_distribution }}
+        env:
+          ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: node scripts/ios-testflight.mjs upload-audio-pilot
       - name: Remove temporary signing and upload material
         if: ${{ always() }}
         run: node scripts/ios-testflight.mjs cleanup
