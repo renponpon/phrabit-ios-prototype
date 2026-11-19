@@ -152,7 +152,8 @@ const checks = [
     const processor = read("Core/Sources/PhrabitCaptureCore/CaptureHTTPProcessor.swift");
     const distribution = readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8");
     const workflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
-    assert.match(preview, /#if PHRABIT_LOCAL_LIVE_AUDIO\s+let liveAudio = settings\["ConnectionCheck"\] == "capture-audio-preview-v1"\s+#else\s+let liveAudio = false/);
+    assert.match(preview, /let liveAudio = Self\.supportsLiveAudio\(settings\)/);
+    assert.match(preview, /#if PHRABIT_LOCAL_LIVE_AUDIO\s+return settings\["ConnectionCheck"\] == "capture-audio-preview-v1"\s+#else\s+return false/);
     assert.match(preview, /liveAudio \? "preview-audio-consent-v1" : "preview-auth-only-v1"/);
     assert.match(preview, /else if liveAudio \{\s+guard let processor = try\? CaptureHTTPProcessor\(previewAudio:/);
     assert.match(processor, /project == configuration\.apiOrigin/);

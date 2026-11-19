@@ -26,11 +26,7 @@ final class CapturePreviewAuthLaunch: ObservableObject {
             return
         }
         let usesCaptureEdge = settings["ConnectionCheck"] == "capture-edge-v1"
-        #if PHRABIT_LOCAL_LIVE_AUDIO
-        let liveAudio = settings["ConnectionCheck"] == "capture-audio-preview-v1"
-        #else
-        let liveAudio = false
-        #endif
+        let liveAudio = Self.supportsLiveAudio(settings)
         let localRecordingOnly = usesCaptureEdge && settings["LocalMockRecording"] == "true"
         var expectedKeys: Set<String> = ["ProjectRef", "PublishableKey"]
         if usesCaptureEdge || liveAudio { expectedKeys.insert("ConnectionCheck") }
@@ -77,6 +73,14 @@ final class CapturePreviewAuthLaunch: ObservableObject {
         } else {
             mode = .preview(access, diagnostics, usesCaptureEdge: usesCaptureEdge)
         }
+    }
+
+    private static func supportsLiveAudio(_ settings: [String: String]) -> Bool {
+        #if PHRABIT_LOCAL_LIVE_AUDIO
+        return settings["ConnectionCheck"] == "capture-audio-preview-v1"
+        #else
+        return false
+        #endif
     }
 }
 

@@ -59,8 +59,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/App/CapturePreviewAuthView.swift",
-      "bytes": 7639,
-      "sha256": "c26bc2567bbddd262e661d18b8a0c45d27c3af046e8ccfd1742c8ac842bfae5a"
+      "bytes": 7767,
+      "sha256": "eebe2369487fb42b3229a9b86047362e753270f9cff5cc1db049a9868610a7c6"
     },
     {
       "path": "native/ios/PhrabitCapture/App/CaptureBrowserLogin.swift",
@@ -214,8 +214,8 @@
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 15876,
-      "sha256": "447c5d03d3b209d7bc8e522af51d4143333bc7fc163762f07b8c7f3c9efba9ab"
+      "bytes": 15940,
+      "sha256": "2bef980aa45eb9b76a257e9506b2c1f0edf45d27d194b2a3c77272db3acfbc5e"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
