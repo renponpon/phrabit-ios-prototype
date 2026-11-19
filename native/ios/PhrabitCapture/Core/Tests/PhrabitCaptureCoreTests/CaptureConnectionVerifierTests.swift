@@ -206,22 +206,50 @@ final class CaptureConnectionVerifierTests: XCTestCase {
         let access = signedIn()
         let configuration = try previewConfiguration()
         let client = try CaptureConnectionVerifier(previewAuth: configuration, target: .captureAudio, access: access, protocolClasses: [ConnectionCheckStub.self])
-        for contract in ["capture-edge-v1", "capture-audio-preview-v1"] {
+        for contract in ["capture-edge-v1", "capture-audio-pilot-v1", "capture-audio-preview-v1"] {
             ConnectionCheckStub.handler = { request in
                 XCTAssertEqual(request.url, configuration.projectURL.appendingPathComponent("functions/v1/phrabit-capture-audio/access"))
                 XCTAssertEqual(request.httpMethod, "GET")
                 XCTAssertNil(request.httpBody)
                 XCTAssertNil(request.httpBodyStream)
-                return (200, "application/json", try Self.success(changes: ["contract": contract]), nil)
+                var changes = ["contract": contract]
+                if contract == "capture-audio-pilot-v1" {
+                    changes["expiresAt"] = String(Int64(Date().addingTimeInterval(60).timeIntervalSince1970 * 1000))
+                }
+                return (200, "application/json", try Self.success(changes: changes), nil)
             }
             do {
                 try await client.verify()
                 XCTAssertEqual(contract, "capture-audio-preview-v1")
             } catch let failure as CaptureConnectionCheckError {
-                XCTAssertEqual(contract, "capture-edge-v1")
+                XCTAssertNotEqual(contract, "capture-audio-preview-v1")
                 if case .invalidResponse = failure {} else { XCTFail("誤ったエラー") }
             }
         }
+    }
+
+    func testAudioPilotRequiresItsOwnBoundedDeadlineRatherThanTheSilentProof() async throws {
+        let configuration = try previewConfiguration()
+        let client = try CaptureConnectionVerifier(previewAuth: configuration, target: .captureAudioPilot, access: signedIn(), protocolClasses: [ConnectionCheckStub.self])
+        let deadline = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down) + 60)
+        let candidate = ["contract": "capture-audio-pilot-v1", "expiresAt": String(Int64(deadline.timeIntervalSince1970 * 1000))]
+        for changes in [
+            ["contract": "capture-audio-preview-v1"],
+            ["contract": "capture-audio-pilot-v1"],
+            ["contract": "capture-audio-pilot-v1", "expiresAt": "0"],
+            ["contract": "capture-audio-pilot-v1", "expiresAt": String(Int64((deadline.timeIntervalSince1970 + 900) * 1000))],
+        ] {
+            ConnectionCheckStub.handler = { _ in (200, "application/json", try Self.success(changes: changes), nil) }
+            do { _ = try await client.verifyAudioPilot(); XCTFail("期限なしまたは不正な検証枠を受け付けました") }
+            catch { XCTAssertTrue(error is CaptureConnectionCheckError) }
+        }
+        ConnectionCheckStub.handler = { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertNil(request.httpBody)
+            return (200, "application/json", try Self.success(changes: candidate), nil)
+        }
+        let verified = try await client.verifyAudioPilot()
+        XCTAssertEqual(verified, deadline)
     }
 
     func testPreviewAuthRejectsNonSupabaseHostOrDifferentOrigin() throws {

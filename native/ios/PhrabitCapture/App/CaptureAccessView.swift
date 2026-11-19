@@ -4,6 +4,7 @@ import SwiftUI
 struct CaptureAccessView: View {
     @ObservedObject var access: CaptureAccessController
     var diagnostics: CaptureConnectionDiagnostics? = nil
+    var audioPilot = false
     @State private var acknowledged = false
     @Environment(\.dismiss) private var dismiss
 
@@ -16,6 +17,10 @@ struct CaptureAccessView: View {
                     Text("翻訳のため、録音をOpenAIへ、認識した日本語をGoogleのGeminiへPhrabit経由で送ります。")
                     Text("録音ファイルは送信前に端末から削除し、フレーズ・ドリルには保存しません。処理事業者側の保持がゼロという意味ではありません。AIの誤認識・誤訳があるため、大切な内容は確認してください。")
                         .font(.footnote)
+                    if audioPilot {
+                        Text("案内された時間内に、個人情報を含まない短い日本語を1回だけ話してください。「停止して翻訳」を押すまで、音声は送りません。")
+                            .font(.footnote)
+                    }
                 } header: { Text("1. 音声と認識文の送信") }
 
                 if !access.consentAccepted {
@@ -50,7 +55,7 @@ struct CaptureAccessView: View {
                     Section { Text(message).foregroundStyle(.red) }
                 }
                 if let diagnostics {
-                    CaptureConnectionDiagnosticsView(diagnostics: diagnostics, canCheck: access.canRecord, previewCaptureEdge: true)
+                    CaptureConnectionDiagnosticsView(diagnostics: diagnostics, canCheck: access.canRecord, previewCaptureEdge: !audioPilot, audioPilot: audioPilot)
                 }
                 Section {
                     Text("設定後はロック画面のPhrabitから録音できます。録音開始前にログイン更新の通信を待ちません。期限切れなどで再ログインが必要な場合は案内します。")
@@ -85,6 +90,7 @@ struct CaptureConnectionDiagnosticsView: View {
     var previewOnly = false
     var previewCaptureEdge = false
     var previewAudioAccessOnly = false
+    var audioPilot = false
 
     var body: some View {
         Section {
@@ -93,15 +99,15 @@ struct CaptureConnectionDiagnosticsView: View {
                 ProgressView("接続を確認中")
                 Button("確認を中止", action: diagnostics.cancel)
             case .ready:
-                Label(previewAudioAccessOnly ? "新しい検証経路に接続できました（音声未送信）" : previewCaptureEdge ? "検証用APIに接続できました（音声未送信）" : "接続確認OK（音声未送信）", systemImage: "checkmark.circle")
+                Label(audioPilot ? "検証枠を確認しました（音声未送信）" : previewAudioAccessOnly ? "新しい検証経路に接続できました（音声未送信）" : previewCaptureEdge ? "検証用APIに接続できました（音声未送信）" : "接続確認OK（音声未送信）", systemImage: "checkmark.circle")
             case .failed(let message):
                 Text(message).foregroundStyle(.red)
             case .idle:
                 EmptyView()
             }
-            Button("接続を確認（音声を送らない）", action: diagnostics.run)
+            Button(audioPilot ? "検証枠を確認（音声を送らない）" : "接続を確認（音声を送らない）", action: diagnostics.run)
                 .disabled(!canCheck || diagnostics.isBusy)
-            Text(previewAudioAccessOnly || previewCaptureEdge ? "ログインした本人が検証用APIに接続できるか確認します。音声・翻訳・学習データは送りません。" : previewOnly ? "Previewの認証サーバーに接続し、ログイン中のアカウントか確認します。音声・翻訳・学習データは送りません。" : "認証だけを確認します。録音・翻訳・フレーズ保存・学習日の記録は行いません。録音開始前に自動実行しません。")
+            Text(audioPilot ? "この確認では音声を送りません。試せるのは案内された時間内だけです。" : previewAudioAccessOnly || previewCaptureEdge ? "ログインした本人が検証用APIに接続できるか確認します。音声・翻訳・学習データは送りません。" : previewOnly ? "Previewの認証サーバーに接続し、ログイン中のアカウントか確認します。音声・翻訳・学習データは送りません。" : "認証だけを確認します。録音・翻訳・フレーズ保存・学習日の記録は行いません。録音開始前に自動実行しません。")
                 .font(.footnote)
         } header: { Text("接続確認") }
     }

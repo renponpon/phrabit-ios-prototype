@@ -19,7 +19,7 @@ public enum CaptureConnectionCheckError: LocalizedError {
 
 @MainActor
 public final class CaptureConnectionVerifier {
-    public enum PreviewTarget { case account, captureEdge, captureAudio }
+    public enum PreviewTarget { case account, captureEdge, captureAudio, captureAudioPilot }
 
     private let endpoint: URL
     private let session: URLSession
@@ -52,6 +52,9 @@ public final class CaptureConnectionVerifier {
         case .captureAudio:
             self.endpoint = project.appendingPathComponent("functions/v1/phrabit-capture-audio/access")
             self.responseContract = "capture-audio-preview-v1"
+        case .captureAudioPilot:
+            self.endpoint = project.appendingPathComponent("functions/v1/phrabit-capture-audio/access")
+            self.responseContract = "capture-audio-pilot-v1"
         }
         self.access = access
         self.session = CaptureHTTPProcessor.makeSession(protocolClasses: protocolClasses, timeout: 10)
@@ -59,6 +62,15 @@ public final class CaptureConnectionVerifier {
     }
 
     public func verify() async throws {
+        _ = try await verifiedDeadline()
+    }
+
+    public func verifyAudioPilot() async throws -> Date {
+        guard let deadline = try await verifiedDeadline() else { throw CaptureConnectionCheckError.invalidResponse }
+        return deadline
+    }
+
+    private func verifiedDeadline() async throws -> Date? {
         try Task.checkCancellation()
         guard access.canRecord, let expectedUser = access.userID else { throw CaptureConnectionCheckError.signInRequired }
         let revision = access.sessionRevision
@@ -86,7 +98,7 @@ public final class CaptureConnectionVerifier {
             if (300...399).contains(response.statusCode) { throw CaptureConnectionCheckError.deploymentProtected }
             guard let responseContract else {
                 try Self.validatePreviewAuth(data: data, response: response, expectedUser: expectedUser)
-                return
+                return nil
             }
             guard data.count <= 4096,
                   response.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("application/json") == true,
@@ -96,8 +108,16 @@ public final class CaptureConnectionVerifier {
             }
             switch response.statusCode {
             case 200:
-                guard Set(payload.keys) == Set(["requestId", "status", "environment", "contract"]), payload["status"] == "ready",
+                let isPilot = responseContract == "capture-audio-pilot-v1"
+                var expected = Set(["requestId", "status", "environment", "contract"])
+                if isPilot { expected.insert("expiresAt") }
+                guard Set(payload.keys) == expected, payload["status"] == "ready",
                       payload["environment"] == "preview", payload["contract"] == responseContract else { throw CaptureConnectionCheckError.invalidResponse }
+                guard isPilot else { return nil }
+                guard let rawDeadline = payload["expiresAt"], let milliseconds = Int64(rawDeadline) else { throw CaptureConnectionCheckError.invalidResponse }
+                let deadline = Date(timeIntervalSince1970: Double(milliseconds) / 1000)
+                guard (0...900).contains(deadline.timeIntervalSinceNow), deadline > Date() else { throw CaptureConnectionCheckError.unavailable }
+                return deadline
             case 401:
                 guard payload["code"] == "capture_auth_required" else { throw CaptureConnectionCheckError.deploymentProtected }
                 throw CaptureConnectionCheckError.signInRequired

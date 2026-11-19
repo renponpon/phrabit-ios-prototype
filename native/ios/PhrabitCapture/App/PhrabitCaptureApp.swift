@@ -21,13 +21,13 @@ struct PhrabitCaptureApp: App {
             case .localRecording(let model, let access, let diagnostics):
                 recordingView(model: model, access: access, diagnostics: diagnostics, localPreview: true)
             case .liveAudio(let model, let access, let diagnostics):
-                recordingView(model: model, access: access, diagnostics: diagnostics)
+                recordingView(model: model, access: access, diagnostics: diagnostics, audioPilot: true)
             }
         }
     }
 
-    private func recordingView(model: CaptureViewModel, access: CaptureAccessController, diagnostics: CaptureConnectionDiagnostics? = nil, localPreview: Bool = false) -> some View {
-        CaptureView(model: model, access: access, diagnostics: diagnostics, localPreview: localPreview)
+    private func recordingView(model: CaptureViewModel, access: CaptureAccessController, diagnostics: CaptureConnectionDiagnostics? = nil, localPreview: Bool = false, audioPilot: Bool = false) -> some View {
+        CaptureView(model: model, access: access, diagnostics: diagnostics, localPreview: localPreview, audioPilot: audioPilot)
             .preferredColorScheme(.dark)
             .task {
                 if scenePhase == .active {

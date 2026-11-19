@@ -41,13 +41,19 @@ public final class CaptureAccessController: ObservableObject {
     public var isMock: Bool { backend.isMock }
     public var isBusy: Bool { state == .signingIn }
     public var canRecord: Bool { consentAccepted && state == .signedIn && userID != nil }
-    public var canRecordLocally: Bool { allowsVerifiedLocalRecording && canRecord && userID == localRecordingOwner }
+    public var canRecordLocally: Bool {
+        allowsVerifiedLocalRecording && canRecord && userID == localRecordingOwner &&
+        (!requiresPilotDeadline || (localRecordingDeadline.map { isValidPilotDeadline($0) } ?? false))
+    }
     public var sessionRevision: UUID { generation }
     @Published private var localRecordingOwner: UUID?
+    private var localRecordingDeadline: Date?
     private let backend: any CaptureAuthenticating
     private let storage: any CaptureSecureStorage
     private let environmentID: String
     private let allowsVerifiedLocalRecording: Bool
+    private let requiresPilotDeadline: Bool
+    private let now: () -> Date
     private var operationID: UUID?
     private var operation: Task<Void, Never>?
     private var refresh: Task<String, Error>?
@@ -55,15 +61,19 @@ public final class CaptureAccessController: ObservableObject {
     private var generation = UUID()
     private let consentKey = "capture-consent-v1"
 
-    public init(backend: any CaptureAuthenticating, storage: any CaptureSecureStorage, environmentID: String, allowsVerifiedLocalRecording: Bool = false) {
+    public init(backend: any CaptureAuthenticating, storage: any CaptureSecureStorage, environmentID: String,
+                allowsVerifiedLocalRecording: Bool = false, requiresPilotDeadline: Bool = false, now: @escaping () -> Date = Date.init) {
         self.backend = backend
         self.storage = CaptureEnvironmentStorage(base: storage, namespace: environmentID)
         self.environmentID = environmentID
         self.allowsVerifiedLocalRecording = allowsVerifiedLocalRecording
+        self.requiresPilotDeadline = requiresPilotDeadline
+        self.now = now
         do {
             if let bytes = try self.storage.retrieve(key: consentKey), let record = try? JSONDecoder().decode(ConsentRecord.self, from: bytes) {
                 consentAccepted = record.version == 1 && record.environment == environmentID && record.accepted
                 if consentAccepted, allowsVerifiedLocalRecording, let cached = backend.cachedUserID, cached == record.localRecordingOwner {
+                    localRecordingDeadline = record.localRecordingDeadline
                     localRecordingOwner = cached
                 }
             }
@@ -142,16 +152,26 @@ public final class CaptureAccessController: ObservableObject {
         } catch { state = .failed(CaptureAccessError.storage.localizedDescription) }
     }
 
-    public func confirmLocalRecording(afterCheckFor revision: UUID) throws {
+    public func confirmLocalRecording(afterCheckFor revision: UUID, until deadline: Date? = nil) throws {
         try Task.checkCancellation()
         guard allowsVerifiedLocalRecording, canRecord, generation == revision, let owner = userID else { throw CancellationError() }
-        do { try storeConsent(accepted: true, localRecordingOwner: owner) }
+        if requiresPilotDeadline {
+            guard let deadline, isValidPilotDeadline(deadline) else { throw CaptureConnectionCheckError.unavailable }
+        }
+        do { try storeConsent(accepted: true, localRecordingOwner: owner, localRecordingDeadline: deadline) }
         catch { throw CaptureAccessError.storage }
+        localRecordingDeadline = deadline
         localRecordingOwner = owner
     }
 
-    private func storeConsent(accepted: Bool, localRecordingOwner: UUID? = nil) throws {
-        let record = ConsentRecord(version: 1, environment: environmentID, accepted: accepted, localRecordingOwner: localRecordingOwner)
+    private func isValidPilotDeadline(_ deadline: Date) -> Bool {
+        let remaining = deadline.timeIntervalSince(now())
+        return remaining > 0 && remaining <= 900
+    }
+
+    private func storeConsent(accepted: Bool, localRecordingOwner: UUID? = nil, localRecordingDeadline: Date? = nil) throws {
+        let record = ConsentRecord(version: 1, environment: environmentID, accepted: accepted, localRecordingOwner: localRecordingOwner,
+                                   localRecordingDeadline: localRecordingDeadline)
         try storage.store(key: consentKey, value: JSONEncoder().encode(record))
     }
 
@@ -200,6 +220,7 @@ private struct ConsentRecord: Codable {
     let environment: String
     let accepted: Bool
     let localRecordingOwner: UUID?
+    let localRecordingDeadline: Date?
 }
 
 public final class CaptureMemoryStorage: CaptureSecureStorage, @unchecked Sendable {

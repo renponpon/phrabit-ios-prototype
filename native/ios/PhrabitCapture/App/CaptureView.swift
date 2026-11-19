@@ -6,6 +6,7 @@ struct CaptureView: View {
     @ObservedObject var access: CaptureAccessController
     var diagnostics: CaptureConnectionDiagnostics? = nil
     var localPreview = false
+    var audioPilot = false
     @State private var showsAccess = false
     @AccessibilityFocusState private var resultFocused: Bool
     private let background = Color(red: 21 / 255, green: 28 / 255, blue: 45 / 255)
@@ -16,7 +17,7 @@ struct CaptureView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Text(model.isMock ? "模擬翻訳・音声は送信しません" : "音声翻訳・フレーズは保存しません")
+            Text(audioPilot ? "本人限定の音声翻訳テスト" : model.isMock ? "模擬翻訳・音声は送信しません" : "音声翻訳・フレーズは保存しません")
                 .font(.caption)
                 .foregroundStyle(mint)
                 .padding(.vertical, 10)
@@ -40,7 +41,7 @@ struct CaptureView: View {
             if localPreview, let diagnostics {
                 CapturePreviewAuthView(access: access, diagnostics: diagnostics, usesCaptureEdge: true, localRecordingOnly: true)
             } else {
-                CaptureAccessView(access: access, diagnostics: diagnostics)
+                CaptureAccessView(access: access, diagnostics: diagnostics, audioPilot: audioPilot)
             }
         }
         .onChange(of: model.accessSetupRequested) { _, requested in
@@ -94,7 +95,7 @@ struct CaptureView: View {
                     .font(.body)
             }
             if diagnostics != nil && !access.canRecordLocally {
-                Text("初回は本人確認が必要です。ログインと接続確認を済ませてください。")
+                Text(audioPilot ? "案内された時間になったら、設定でログインし、検証枠を確認してください。" : "初回は本人確認が必要です。ログインと接続確認を済ませてください。")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -178,7 +179,7 @@ struct CaptureView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(24)
             .background(surface, in: RoundedRectangle(cornerRadius: 24))
-            Text(model.isMock ? "録音した音声は破棄します。実翻訳への接続時は、既存PhrabitのGemini翻訳を使用する予定です。" : "音声は認識後に端末から削除します。AIの訳文には誤りが含まれる場合があります。")
+            Text(model.isMock ? "録音した音声は破棄します。実翻訳への接続時は、既存PhrabitのGemini翻訳を使用する予定です。" : "端末の録音ファイルは送信前に削除します。AIの訳文には誤りが含まれる場合があります。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         case .failed(let message):
@@ -197,12 +198,14 @@ struct CaptureView: View {
                 primaryButton(localPreview ? "停止してサンプルを見る" : "停止して翻訳", symbol: "stop.fill", action: model.stopAndTranslate)
             case .idle:
                 primaryButton(
-                    localPreview && !access.canRecordLocally ? "本人確認に進む" : model.setupComplete ? "話す" : "マイクを許可して試す",
+                    (localPreview || audioPilot) && !access.canRecordLocally ? "本人確認に進む" : model.setupComplete ? "話す" : "マイクを許可して試す",
                     symbol: "mic.fill",
                     action: model.startRecording
                 )
             case .result, .failed:
-                primaryButton("もう一度話す", symbol: "mic.fill", action: model.startRecording)
+                if !audioPilot {
+                    primaryButton("もう一度話す", symbol: "mic.fill", action: model.startRecording)
+                }
             case .preparing, .recognizing, .translating:
                 EmptyView()
             }

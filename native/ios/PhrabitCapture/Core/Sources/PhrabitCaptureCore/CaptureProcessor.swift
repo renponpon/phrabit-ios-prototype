@@ -30,6 +30,7 @@ public enum CaptureClientError: LocalizedError {
     case invalidResponse
     case unavailable
     case limited
+    case pilotAlreadyAttempted
     case budgetUnavailable
     case requestFailed
 
@@ -42,6 +43,7 @@ public enum CaptureClientError: LocalizedError {
         case .invalidResponse: return "応答を読み取れませんでした。送信済み処理の料金が発生する場合があります。"
         case .unavailable: return "この試作はまだ利用できません。"
         case .limited: return "利用上限に達しました。時間をおいてお試しください。"
+        case .pilotAlreadyAttempted: return "この回の検証は試行済みです。再送せず、この画面を確認してください。"
         case .budgetUnavailable: return "利用上限を確認できないため停止しています。"
         case .requestFailed: return "通信を完了できませんでした。送信済み処理の料金が発生する場合があります。"
         }

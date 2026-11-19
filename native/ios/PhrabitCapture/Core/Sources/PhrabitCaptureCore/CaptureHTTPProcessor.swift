@@ -128,6 +128,9 @@ public final class CaptureHTTPProcessor: CaptureProcessing {
             case 403:
                 guard Self.isCaptureError(data, response: response, code: "capture_unavailable") else { throw CaptureClientError.deploymentProtected }
                 throw CaptureClientError.unavailable
+            case 409:
+                guard Self.isCaptureError(data, response: response, code: "capture_pilot_attempted") else { throw CaptureClientError.requestFailed }
+                throw CaptureClientError.pilotAlreadyAttempted
             case 300...399: throw CaptureClientError.deploymentProtected
             case 429: throw CaptureClientError.limited
             case 503: throw CaptureClientError.budgetUnavailable

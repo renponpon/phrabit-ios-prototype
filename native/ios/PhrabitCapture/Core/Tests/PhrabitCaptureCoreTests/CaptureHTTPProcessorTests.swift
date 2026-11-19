@@ -56,6 +56,29 @@ final class CaptureHTTPProcessorTests: XCTestCase {
         }
     }
 
+    func testConsumedPilotShowsNoRetryGuidanceWithoutTrustingArbitraryConflict() async throws {
+        for expectedCode in [true, false] {
+            var requests = 0
+            CaptureStubProtocol.handler = { _ in
+                requests += 1
+                return (409, try JSONSerialization.data(withJSONObject: [
+                    "code": expectedCode ? "capture_pilot_attempted" : "unknown",
+                    "requestId": UUID().uuidString
+                ]))
+            }
+            do {
+                _ = try await makeProcessor().translate(text: "こんにちは", to: .chinese, sessionID: identifier)
+                XCTFail("使用済み検証枠を成功と判断しました")
+            } catch let error as CaptureClientError {
+                switch (expectedCode, error) {
+                case (true, .pilotAlreadyAttempted), (false, .requestFailed): break
+                default: XCTFail("409の種類を混同しました")
+                }
+            }
+            XCTAssertEqual(requests, 1)
+        }
+    }
+
     func testWrongSessionOrLanguageResponseIsRejected() async throws {
         for wrongSession in [true, false] {
             let sessionID = wrongSession ? UUID() : identifier

@@ -66,6 +66,30 @@ final class CaptureAccessTests: XCTestCase {
         XCTAssertEqual(backend.tokenRequests, 0)
     }
 
+    func testAudioPilotCannotUseUntimedProofAndExpiresAcrossRelaunch() throws {
+        let backend = AccessTestBackend()
+        backend.cachedUserID = backend.identifier
+        let storage = CaptureMemoryStorage()
+        var now = Date(timeIntervalSince1970: 1000)
+        func controller() -> CaptureAccessController {
+            CaptureAccessController(backend: backend, storage: storage, environmentID: "pilot", allowsVerifiedLocalRecording: true,
+                                    requiresPilotDeadline: true, now: { now })
+        }
+        let access = controller()
+        access.acceptConsent()
+        XCTAssertThrowsError(try access.confirmLocalRecording(afterCheckFor: access.sessionRevision))
+        XCTAssertThrowsError(try access.confirmLocalRecording(afterCheckFor: access.sessionRevision, until: now.addingTimeInterval(901)))
+        XCTAssertFalse(access.canRecordLocally)
+        try access.confirmLocalRecording(afterCheckFor: access.sessionRevision, until: now.addingTimeInterval(60))
+        XCTAssertTrue(access.canRecordLocally)
+        XCTAssertTrue(controller().canRecordLocally)
+        now = now.addingTimeInterval(60)
+        XCTAssertFalse(access.canRecordLocally)
+        XCTAssertFalse(controller().canRecordLocally)
+        XCTAssertTrue(access.canRecord)
+        XCTAssertEqual(backend.tokenRequests, 0)
+    }
+
     func testLocalOwnerProofRestoresOnlyForTheSameUserAndPreview() throws {
         let storage = CaptureMemoryStorage()
         let backend = AccessTestBackend()

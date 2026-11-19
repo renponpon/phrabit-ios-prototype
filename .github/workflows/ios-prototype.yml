@@ -8,6 +8,11 @@ on:
         type: boolean
         required: true
         default: false
+      compile_audio_pilot:
+        description: 本人用の音声パイロット分岐も未署名でコンパイル（接続設定・鍵・配布なし）
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -105,6 +110,26 @@ jobs:
           ]);
           process.stdout.write('All four interface orientations are declared.\n');
           NODE
+      - name: Compile the audio pilot branch without connecting or signing
+        if: ${{ inputs.compile_audio_pilot }}
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          xcodebuild \
+            -project PhrabitCapture.xcodeproj \
+            -scheme PhrabitCapture \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/PilotDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            'SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG PHRABIT_LOCAL_LIVE_AUDIO' \
+            build
+          info=build/PilotDerivedData/Build/Products/Debug-iphonesimulator/PhrabitCapture.app/Info.plist
+          test -f "$info"
+          plutil -lint "$info"
+          if plutil -extract PhrabitPreviewAuthOnly json -o /dev/null "$info" 2>/dev/null; then
+            echo 'The unsigned pilot compile must not contain connection settings.'
+            exit 1
+          fi
       - name: Build unsigned iPhone archive
         working-directory: native/ios/PhrabitCapture
         run: |

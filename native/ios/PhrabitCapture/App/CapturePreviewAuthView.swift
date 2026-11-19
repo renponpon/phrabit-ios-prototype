@@ -50,20 +50,25 @@ final class CapturePreviewAuthLaunch: ObservableObject {
             mode = .invalid
             return
         }
-        let storage = CaptureEnvironmentStorage(base: CaptureCredentialStore(), namespace: liveAudio ? "preview-audio-consent-v1" : "preview-auth-only-v1")
+        let storage = CaptureEnvironmentStorage(base: CaptureCredentialStore(), namespace: liveAudio ? "preview-audio-pilot-v1" : "preview-auth-only-v1")
         let browser = CaptureBrowserLogin()
         let backend = CaptureSupabaseAuthentication(configuration: configuration, storage: storage, openBrowser: { try await browser.open($0) })
         let access = CaptureAccessController(backend: backend, storage: storage, environmentID: configuration.environmentID,
-                                             allowsVerifiedLocalRecording: localRecordingOnly || liveAudio)
-        let target: CaptureConnectionVerifier.PreviewTarget = liveAudio || audioAccessOnly ? .captureAudio : usesCaptureEdge ? .captureEdge : .account
+                                             allowsVerifiedLocalRecording: localRecordingOnly || liveAudio, requiresPilotDeadline: liveAudio)
+        let target: CaptureConnectionVerifier.PreviewTarget = liveAudio ? .captureAudioPilot : audioAccessOnly ? .captureAudio : usesCaptureEdge ? .captureEdge : .account
         guard let verifier = try? CaptureConnectionVerifier(previewAuth: configuration, target: target, access: access) else {
             mode = .invalid
             return
         }
         let diagnostics = CaptureConnectionDiagnostics(access: access, check: {
             let revision = access.sessionRevision
-            try await verifier.verify()
-            if localRecordingOnly || liveAudio { try access.confirmLocalRecording(afterCheckFor: revision) }
+            if liveAudio {
+                let deadline = try await verifier.verifyAudioPilot()
+                try access.confirmLocalRecording(afterCheckFor: revision, until: deadline)
+            } else {
+                try await verifier.verify()
+                if localRecordingOnly { try access.confirmLocalRecording(afterCheckFor: revision) }
+            }
         })
         if localRecordingOnly {
             let model = CaptureViewModel(processor: MockCaptureProcessor(), recordingAllowed: { access.canRecordLocally })
@@ -84,7 +89,7 @@ final class CapturePreviewAuthLaunch: ObservableObject {
 
     private static func supportsLiveAudio(_ settings: [String: String]) -> Bool {
         #if PHRABIT_LOCAL_LIVE_AUDIO
-        return settings["ConnectionCheck"] == "capture-audio-preview-v1"
+        return settings["ConnectionCheck"] == "capture-audio-pilot-v1"
         #else
         return false
         #endif

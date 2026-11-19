@@ -153,14 +153,14 @@ const checks = [
     const distribution = readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8");
     const workflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
     assert.match(preview, /let liveAudio = Self\.supportsLiveAudio\(settings\)/);
-    assert.match(preview, /#if PHRABIT_LOCAL_LIVE_AUDIO\s+return settings\["ConnectionCheck"\] == "capture-audio-preview-v1"\s+#else\s+return false/);
-    assert.match(preview, /liveAudio \? "preview-audio-consent-v1" : "preview-auth-only-v1"/);
+    assert.match(preview, /#if PHRABIT_LOCAL_LIVE_AUDIO\s+return settings\["ConnectionCheck"\] == "capture-audio-pilot-v1"\s+#else\s+return false/);
+    assert.match(preview, /liveAudio \? "preview-audio-pilot-v1" : "preview-auth-only-v1"/);
     assert.match(preview, /else if liveAudio \{\s+guard let processor = try\? CaptureHTTPProcessor\(previewAudio:/);
     assert.match(processor, /project == configuration\.apiOrigin/);
     assert.match(processor, /response\.url == destination/);
     assert.doesNotMatch(processor, /x-vercel-protection-bypass/);
     for (const settings of [distribution, workflow, read("project.yml")]) {
-      assert.doesNotMatch(settings, /PHRABIT_LOCAL_LIVE_AUDIO|capture-audio-preview-v1/);
+      assert.doesNotMatch(settings, /PHRABIT_LOCAL_LIVE_AUDIO|capture-audio-(preview|pilot)-v1/);
     }
   }],
   ["new-path diagnostics only visits the authenticated GET and cannot queue a recording", () => {
@@ -170,7 +170,7 @@ const checks = [
     const verifier = read("Core/Sources/PhrabitCaptureCore/CaptureConnectionVerifier.swift");
     const workflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
     assert.match(preview, /guard diagnosticsOnly == audioAccessOnly else \{ mode = \.invalid; return \}/);
-    assert.match(preview, /liveAudio \|\| audioAccessOnly \? \.captureAudio/);
+    assert.match(preview, /liveAudio \? \.captureAudioPilot : audioAccessOnly \? \.captureAudio/);
     assert.match(preview, /allowsVerifiedLocalRecording: localRecordingOnly \|\| liveAudio/);
     assert.match(preview, /mode = \.preview\(access, diagnostics, usesCaptureEdge: usesCaptureEdge, audioAccessOnly: audioAccessOnly\)/);
     assert.match(app, /case \.preview\(let previewAccess, let diagnostics, let usesCaptureEdge, let audioAccessOnly\):\s+CapturePreviewAuthView/);
@@ -180,6 +180,17 @@ const checks = [
     assert.doesNotMatch(verifier, /request\.httpBody/);
     assert.match(workflow, /preview_audio_access_only:[\s\S]*?default: false/);
     assert.match(workflow, /environment: ios-testflight/);
+  }],
+  ["the unsigned pilot compile keeps connectivity and signing disabled", () => {
+    const workflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
+    const access = read("Core/Sources/PhrabitCaptureCore/CaptureAccess.swift");
+    const preview = read("App/CapturePreviewAuthView.swift");
+    assert.match(workflow, /compile_audio_pilot:[\s\S]*?default: false/);
+    assert.match(workflow, /if: \$\{\{ inputs\.compile_audio_pilot \}\}[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?PHRABIT_LOCAL_LIVE_AUDIO[\s\S]*?extract PhrabitPreviewAuthOnly/);
+    assert.doesNotMatch(workflow, /\bsecrets\./);
+    assert.match(preview, /try await verifier\.verifyAudioPilot\(\)\s+try access\.confirmLocalRecording\(afterCheckFor: revision, until: deadline\)/);
+    assert.match(preview, /requiresPilotDeadline: liveAudio/);
+    assert.match(access, /remaining > 0 && remaining <= 900/);
   }],
   ["opt-in Preview recording requires proof, retains no audio, and uses a fresh lock-screen request", () => {
     const preview = read("App/CapturePreviewAuthView.swift");
@@ -226,7 +237,7 @@ const checks = [
     assert.match(workflow, /Verify unsigned iPhone archive identifiers and privacy/);
     assert.match(workflow, /UISupportedInterfaceOrientations json/);
     assert.match(workflow, /All interface orientations must be supported/);
-    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 2);
+    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 3);
     assert.doesNotMatch(workflow, /^\s+(push|pull_request|schedule):/m);
     assert.doesNotMatch(workflow, /secrets\.|upload_to_testflight|app-store-connect|vercel|curl|\.env/);
     assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
