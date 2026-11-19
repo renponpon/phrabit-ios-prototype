@@ -20,8 +20,14 @@ export function validateExecution(environment) {
 export function previewAuthSettings(environment) {
   const captureCheck = environment.IOS_PREVIEW_CAPTURE_CHECK ?? 'false';
   const mockRecording = environment.IOS_PREVIEW_MOCK_RECORDING ?? 'false';
+  const audioAccessOnly = environment.IOS_PREVIEW_AUDIO_ACCESS_ONLY ?? 'false';
   assert.ok(captureCheck === 'false' || captureCheck === 'true', 'Invalid capture check mode');
   assert.ok(mockRecording === 'false' || mockRecording === 'true', 'Invalid mock recording mode');
+  assert.ok(audioAccessOnly === 'false' || audioAccessOnly === 'true', 'Invalid audio diagnostics mode');
+  if (audioAccessOnly === 'true') {
+    assert.equal(environment.IOS_PREVIEW_AUTH_ONLY, 'true', 'Audio diagnostics requires Preview auth-only mode');
+    assert.ok(captureCheck === 'false' && mockRecording === 'false', 'Audio diagnostics cannot include legacy diagnostics or recording');
+  }
   if (mockRecording === 'true') assert.equal(captureCheck, 'true', 'Local mock recording requires Preview capture check');
   if (captureCheck === 'true') assert.equal(environment.IOS_PREVIEW_AUTH_ONLY, 'true', 'Capture check requires Preview auth-only mode');
   if (!environment.IOS_PREVIEW_AUTH_ONLY || environment.IOS_PREVIEW_AUTH_ONLY === 'false') return undefined;
@@ -32,6 +38,7 @@ export function previewAuthSettings(environment) {
   assert.ok(/^sb_publishable_[A-Za-z0-9_-]{20,150}$/.test(publishableKey), 'A modern publishable key is required; secret and service-role keys are not accepted');
   return { ProjectRef: reference, PublishableKey: publishableKey,
     ...(captureCheck === 'true' ? { ConnectionCheck: 'capture-edge-v1' } : {}),
+    ...(audioAccessOnly === 'true' ? { ConnectionCheck: 'capture-audio-diagnostics-v1' } : {}),
     ...(mockRecording === 'true' ? { LocalMockRecording: 'true' } : {}) };
 }
 
@@ -59,6 +66,9 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, prev
     MARKETING_VERSION: '0.1.0'
   };
   const info = { properties: { CFBundleVersion: '$(CURRENT_PROJECT_VERSION)', CFBundleShortVersionString: '$(MARKETING_VERSION)' } };
+  const diagnosticsOnly = previewSettings?.ConnectionCheck === 'capture-audio-diagnostics-v1';
+  if (diagnosticsOnly) assert.ok(!('LocalMockRecording' in previewSettings), 'Diagnostics cannot include recording');
+  const diagnosticsMarker = diagnosticsOnly ? { PhrabitDiagnosticsOnly: true } : {};
   return {
     include: ['project.yml'],
     settings: { base: signing },
@@ -67,13 +77,15 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, prev
         settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: appUuid } },
         info: previewSettings ? { properties: {
           ...info.properties,
+          ...diagnosticsMarker,
           PhrabitPreviewAuthOnly: previewSettings,
           NSMicrophoneUsageDescription: previewSettings.LocalMockRecording === 'true'
             ? '端末内で録音を試します。音声は送信せず、録音後に削除します。'
             : 'この接続検証版はマイクを使用しません。'
         } } : info
       },
-      PhrabitCaptureControl: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: controlUuid } }, info }
+      PhrabitCaptureControl: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: controlUuid } },
+        info: { properties: { ...info.properties, ...diagnosticsMarker } } }
     }
   };
 }
@@ -246,6 +258,13 @@ function main(stage) {
         Object.keys(bundled).length === Object.keys(settings).length, 'Preview bundle configuration mismatch');
       const extensionInfo = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(controlPath, 'Info.plist')], 'control-info'));
       assert.ok(!('PhrabitPreviewAuthOnly' in extensionInfo), 'Preview configuration must be app-only');
+      if (settings.ConnectionCheck === 'capture-audio-diagnostics-v1') {
+        const appInfo = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(appPath, 'Info.plist')], 'diagnostics-app-info'));
+        assert.ok(appInfo.PhrabitDiagnosticsOnly === true && extensionInfo.PhrabitDiagnosticsOnly === true, 'Diagnostics must disable recording in app and control');
+        assert.equal(appInfo.NSMicrophoneUsageDescription, 'この接続検証版はマイクを使用しません。');
+        assert.ok(!('LocalMockRecording' in bundled), 'Diagnostics cannot include recording');
+        console.log('Connection diagnostics only; recording disabled in the app and control.');
+      }
       const bundledPrivacy = JSON.parse(run('plutil', ['-extract', 'NSPrivacyCollectedDataTypes', 'json', '-o', '-', path.join(appPath, 'PrivacyInfo.xcprivacy')], 'preview-auth-bundled-privacy'));
       assert.deepEqual(bundledPrivacy, previewAuthPrivacyCategories());
     }

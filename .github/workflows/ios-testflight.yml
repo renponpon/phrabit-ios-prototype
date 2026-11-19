@@ -27,6 +27,11 @@ on:
         type: boolean
         required: true
         default: false
+      preview_audio_access_only:
+        description: 新経路の接続確認だけ（preview_auth_only必須、旧接続確認・録音はOFF）
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -68,6 +73,7 @@ jobs:
           IOS_PREVIEW_AUTH_ONLY: ${{ inputs.preview_auth_only }}
           IOS_PREVIEW_CAPTURE_CHECK: ${{ inputs.preview_capture_check }}
           IOS_PREVIEW_MOCK_RECORDING: ${{ inputs.preview_mock_recording }}
+          IOS_PREVIEW_AUDIO_ACCESS_ONLY: ${{ inputs.preview_audio_access_only }}
           IOS_PREVIEW_PROJECT_REF: ${{ secrets.IOS_PREVIEW_PROJECT_REF }}
           IOS_PREVIEW_PUBLISHABLE_KEY: ${{ secrets.IOS_PREVIEW_PUBLISHABLE_KEY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

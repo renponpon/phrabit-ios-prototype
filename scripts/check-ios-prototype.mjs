@@ -163,6 +163,24 @@ const checks = [
       assert.doesNotMatch(settings, /PHRABIT_LOCAL_LIVE_AUDIO|capture-audio-preview-v1/);
     }
   }],
+  ["new-path diagnostics only visits the authenticated GET and cannot queue a recording", () => {
+    const app = read("App/PhrabitCaptureApp.swift");
+    const preview = read("App/CapturePreviewAuthView.swift");
+    const intent = read("Shared/OpenRecorderIntent.swift");
+    const verifier = read("Core/Sources/PhrabitCaptureCore/CaptureConnectionVerifier.swift");
+    const workflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
+    assert.match(preview, /guard diagnosticsOnly == audioAccessOnly else \{ mode = \.invalid; return \}/);
+    assert.match(preview, /liveAudio \|\| audioAccessOnly \? \.captureAudio/);
+    assert.match(preview, /allowsVerifiedLocalRecording: localRecordingOnly \|\| liveAudio/);
+    assert.match(preview, /mode = \.preview\(access, diagnostics, usesCaptureEdge: usesCaptureEdge, audioAccessOnly: audioAccessOnly\)/);
+    assert.match(app, /case \.preview\(let previewAccess, let diagnostics, let usesCaptureEdge, let audioAccessOnly\):\s+CapturePreviewAuthView/);
+    assert.match(intent, /"PhrabitDiagnosticsOnly"\) as\? Bool != true \{\s+CaptureLaunchRequest\.enqueue\(\)/);
+    assert.match(verifier, /functions\/v1\/phrabit-capture-audio\/access/);
+    assert.match(verifier, /request\.httpMethod = "GET"/);
+    assert.doesNotMatch(verifier, /request\.httpBody/);
+    assert.match(workflow, /preview_audio_access_only:[\s\S]*?default: false/);
+    assert.match(workflow, /environment: ios-testflight/);
+  }],
   ["opt-in Preview recording requires proof, retains no audio, and uses a fresh lock-screen request", () => {
     const preview = read("App/CapturePreviewAuthView.swift");
     const model = read("App/CaptureViewModel.swift");

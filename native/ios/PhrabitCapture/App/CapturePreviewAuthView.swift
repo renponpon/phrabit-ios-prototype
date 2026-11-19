@@ -7,7 +7,7 @@ final class CapturePreviewAuthLaunch: ObservableObject {
     enum Mode {
         case offline(CaptureViewModel, CaptureAccessController)
         case invalid
-        case preview(CaptureAccessController, CaptureConnectionDiagnostics, usesCaptureEdge: Bool)
+        case preview(CaptureAccessController, CaptureConnectionDiagnostics, usesCaptureEdge: Bool, audioAccessOnly: Bool)
         case localRecording(CaptureViewModel, CaptureAccessController, CaptureConnectionDiagnostics)
         case liveAudio(CaptureViewModel, CaptureAccessController, CaptureConnectionDiagnostics)
     }
@@ -15,8 +15,13 @@ final class CapturePreviewAuthLaunch: ObservableObject {
     let mode: Mode
 
     init(bundle: Bundle = .main) {
+        let diagnosticsOnly = bundle.object(forInfoDictionaryKey: "PhrabitDiagnosticsOnly") as? Bool == true
         guard let values = bundle.object(forInfoDictionaryKey: "PhrabitPreviewAuthOnly") else {
-            mode = .offline(CaptureViewModel(), .mock())
+            if diagnosticsOnly {
+                mode = .invalid
+            } else {
+                mode = .offline(CaptureViewModel(), .mock())
+            }
             return
         }
         guard let settings = values as? [String: String],
@@ -26,10 +31,12 @@ final class CapturePreviewAuthLaunch: ObservableObject {
             return
         }
         let usesCaptureEdge = settings["ConnectionCheck"] == "capture-edge-v1"
+        let audioAccessOnly = settings["ConnectionCheck"] == "capture-audio-diagnostics-v1"
+        guard diagnosticsOnly == audioAccessOnly else { mode = .invalid; return }
         let liveAudio = Self.supportsLiveAudio(settings)
         let localRecordingOnly = usesCaptureEdge && settings["LocalMockRecording"] == "true"
         var expectedKeys: Set<String> = ["ProjectRef", "PublishableKey"]
-        if usesCaptureEdge || liveAudio { expectedKeys.insert("ConnectionCheck") }
+        if usesCaptureEdge || liveAudio || audioAccessOnly { expectedKeys.insert("ConnectionCheck") }
         if localRecordingOnly { expectedKeys.insert("LocalMockRecording") }
         guard Set(settings.keys) == expectedKeys else {
             mode = .invalid
@@ -48,7 +55,7 @@ final class CapturePreviewAuthLaunch: ObservableObject {
         let backend = CaptureSupabaseAuthentication(configuration: configuration, storage: storage, openBrowser: { try await browser.open($0) })
         let access = CaptureAccessController(backend: backend, storage: storage, environmentID: configuration.environmentID,
                                              allowsVerifiedLocalRecording: localRecordingOnly || liveAudio)
-        let target: CaptureConnectionVerifier.PreviewTarget = liveAudio ? .captureAudio : usesCaptureEdge ? .captureEdge : .account
+        let target: CaptureConnectionVerifier.PreviewTarget = liveAudio || audioAccessOnly ? .captureAudio : usesCaptureEdge ? .captureEdge : .account
         guard let verifier = try? CaptureConnectionVerifier(previewAuth: configuration, target: target, access: access) else {
             mode = .invalid
             return
@@ -71,7 +78,7 @@ final class CapturePreviewAuthLaunch: ObservableObject {
                                          authenticationRequired: { access.clearSession() })
             mode = .liveAudio(model, access, diagnostics)
         } else {
-            mode = .preview(access, diagnostics, usesCaptureEdge: usesCaptureEdge)
+            mode = .preview(access, diagnostics, usesCaptureEdge: usesCaptureEdge, audioAccessOnly: audioAccessOnly)
         }
     }
 
@@ -88,6 +95,7 @@ struct CapturePreviewAuthView: View {
     @ObservedObject var access: CaptureAccessController
     let diagnostics: CaptureConnectionDiagnostics
     let usesCaptureEdge: Bool
+    var audioAccessOnly = false
     var localRecordingOnly = false
     @State private var acknowledged = false
     @Environment(\.dismiss) private var dismiss
@@ -97,6 +105,10 @@ struct CapturePreviewAuthView: View {
             Form {
                 Section("この版で確認すること") {
                     Text(localRecordingOnly ? "本人確認後、端末内で録音できます。音声は送信せず破棄し、話した内容ではなく固定の訳文を表示します。" : "検証環境でGoogleログインと接続だけを確認します。録音・翻訳・フレーズ保存はできません。")
+                    if audioAccessOnly {
+                        Text("接続確認は、案内された短い検証時間内に行ってください。")
+                            .font(.footnote)
+                    }
                     Text("ログイン時はGoogleと検証用Supabaseでアカウント情報を使用します。認証情報はこの端末のKeychainに保存します。")
                         .font(.footnote)
                 }
@@ -119,7 +131,8 @@ struct CapturePreviewAuthView: View {
                     }
                     if case .failed(let message) = access.state { Text(message).foregroundStyle(.red) }
                 }
-                CaptureConnectionDiagnosticsView(diagnostics: diagnostics, canCheck: access.canRecord, previewOnly: true, previewCaptureEdge: usesCaptureEdge)
+                CaptureConnectionDiagnosticsView(diagnostics: diagnostics, canCheck: access.canRecord, previewOnly: true,
+                                                 previewCaptureEdge: usesCaptureEdge, previewAudioAccessOnly: audioAccessOnly)
                 if localRecordingOnly {
                     Section {
                         if access.canRecordLocally {

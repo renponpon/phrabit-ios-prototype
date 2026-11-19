@@ -1,4 +1,5 @@
 import AppIntents
+import Foundation
 
 enum CaptureDestination: String, AppEnum {
     case recorder
@@ -22,7 +23,9 @@ struct OpenRecorderIntent: OpenIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        CaptureLaunchRequest.enqueue()
+        if Bundle.main.object(forInfoDictionaryKey: "PhrabitDiagnosticsOnly") as? Bool != true {
+            CaptureLaunchRequest.enqueue()
+        }
         return .result()
     }
 }

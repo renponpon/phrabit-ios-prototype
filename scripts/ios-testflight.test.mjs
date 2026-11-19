@@ -102,6 +102,27 @@ test('local mock recording requires both Preview flags', () => {
   assert.equal(targets.PhrabitCaptureControl.info.properties.PhrabitPreviewAuthOnly, undefined);
 });
 
+test('new-path diagnostics requires auth and excludes all other recording and check modes', () => {
+  const audioDiagnostics = { IOS_PREVIEW_AUDIO_ACCESS_ONLY: 'true' };
+  assert.throws(() => previewAuthSettings(audioDiagnostics), /requires Preview auth-only mode/);
+  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_AUDIO_ACCESS_ONLY: 'yes' }), /Invalid audio diagnostics mode/);
+  for (const flag of ['IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING']) {
+    assert.throws(() => previewAuthSettings({ ...audioDiagnostics, IOS_PREVIEW_AUTH_ONLY: 'true', [flag]: 'true' }), /cannot include legacy diagnostics or recording/);
+  }
+});
+
+test('new-path diagnostics produces the no-recording marker in both targets while keeping auth app-only', () => {
+  const settings = { ProjectRef: 'abcdefghijklmnopqrst', PublishableKey: 'sb_publishable_synthetic_example_key', ConnectionCheck: 'capture-audio-diagnostics-v1' };
+  const build = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', settings).targets;
+  assert.equal(build.PhrabitCapture.info.properties.PhrabitDiagnosticsOnly, true);
+  assert.equal(build.PhrabitCaptureControl.info.properties.PhrabitDiagnosticsOnly, true);
+  assert.equal(build.PhrabitCaptureControl.info.properties.PhrabitPreviewAuthOnly, undefined);
+  assert.equal(build.PhrabitCapture.info.properties.NSMicrophoneUsageDescription, 'この接続検証版はマイクを使用しません。');
+  assert.deepEqual(build.PhrabitCapture.info.properties.PhrabitPreviewAuthOnly, settings);
+  assert.throws(() => distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', { ...settings, LocalMockRecording: 'true' }), /cannot include recording/);
+  assert.equal(distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1').targets.PhrabitCaptureControl.info.properties.PhrabitDiagnosticsOnly, undefined);
+});
+
 test('only the application gets auth configuration and a no-microphone description', () => {
   const settings = { ProjectRef: 'abcdefghijklmnopqrst', PublishableKey: 'sb_publishable_synthetic_example_key' };
   const spec = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', settings);
