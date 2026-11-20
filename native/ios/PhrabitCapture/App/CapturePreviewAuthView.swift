@@ -16,7 +16,9 @@ final class CapturePreviewAuthLaunch: ObservableObject {
 
     init(bundle: Bundle = .main) {
         let diagnosticsOnly = bundle.object(forInfoDictionaryKey: "PhrabitDiagnosticsOnly") as? Bool == true
-        #if PHRABIT_OFFLINE_STARTUP_TIMING
+        #if PHRABIT_OFFLINE_STARTUP_TIMING && PHRABIT_OFFLINE_TRANSLATION_HOME
+        mode = .invalid
+        #elseif PHRABIT_OFFLINE_STARTUP_TIMING || PHRABIT_OFFLINE_TRANSLATION_HOME
         if diagnosticsOnly || bundle.object(forInfoDictionaryKey: "PhrabitPreviewAuthOnly") != nil {
             mode = .invalid
         } else {

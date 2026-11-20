@@ -18,6 +18,11 @@ on:
         type: boolean
         required: false
         default: false
+      compile_translation_home:
+        description: 送信なしの翻訳ホームを未署名でビルド（接続設定・鍵・配布なし）
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -223,6 +228,41 @@ jobs:
             test ! -d "$bundle/_CodeSignature"
             if plutil -extract PhrabitPreviewAuthOnly json -o /dev/null "$bundle/Info.plist" 2>/dev/null; then
               echo 'The timing build must not contain connection settings.'
+              exit 1
+            fi
+          done
+      - name: Build the offline translation home and control without signing
+        if: ${{ inputs.compile_translation_home }}
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          cat > translation-home-build.yml <<'YAML'
+          include: [project.yml]
+          settings:
+            configs:
+              Debug:
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) PHRABIT_OFFLINE_TRANSLATION_HOME'
+          YAML
+          xcodegen generate --spec translation-home-build.yml
+          mkdir -p PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          cp Core/Package.resolved PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          xcodebuild \
+            -project PhrabitCapture.xcodeproj \
+            -scheme PhrabitCapture \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/TranslationHomeDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -onlyUsePackageVersionsFromResolvedFile \
+            build
+          app=build/TranslationHomeDerivedData/Build/Products/Debug-iphoneos/PhrabitCapture.app
+          control="$app/PlugIns/PhrabitCaptureControl.appex"
+          for bundle in "$app" "$control"; do
+            test -f "$bundle/Info.plist"
+            test ! -e "$bundle/embedded.mobileprovision"
+            test ! -d "$bundle/_CodeSignature"
+            if plutil -extract PhrabitPreviewAuthOnly json -o /dev/null "$bundle/Info.plist" 2>/dev/null; then
+              echo 'The offline translation home must not contain connection settings.'
               exit 1
             fi
           done

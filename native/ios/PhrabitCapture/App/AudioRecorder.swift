@@ -60,6 +60,17 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         }
     }
 
+    #if PHRABIT_OFFLINE_TRANSLATION_HOME
+    var translationMicrophonePermission: CaptureTranslationHomeRules.MicrophonePermission {
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted: return .allowed
+        case .undetermined: return .notRequested
+        case .denied: return .denied
+        @unknown default: return .denied
+        }
+    }
+    #endif
+
     func start(authorized: () -> Bool, onStartup: (CaptureStartupTiming.Checkpoint) -> Void = { _ in }) async throws {
         let permitted: Bool
         switch AVAudioApplication.shared.recordPermission {

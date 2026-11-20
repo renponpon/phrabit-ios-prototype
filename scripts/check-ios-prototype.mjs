@@ -134,7 +134,7 @@ const checks = [
     const verifier = read("Core/Sources/PhrabitCaptureCore/CaptureConnectionVerifier.swift");
     const distribution = readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8");
     const workflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
-    assert.match(app, /case \.offline\(let model, let access\):\s+recordingView/);
+    assert.match(app, /case \.offline\(let model, let access\):\s+#if PHRABIT_OFFLINE_TRANSLATION_HOME[\s\S]*?#else\s+recordingView/);
     assert.match(preview, /mode = \.offline/);
     assert.match(preview, /CaptureConnectionVerifier\(previewAuth:/);
     assert.match(verifier, /auth\/v1\/user/);
@@ -244,7 +244,7 @@ const checks = [
     assert.match(workflow, /Verify unsigned iPhone archive identifiers and privacy/);
     assert.match(workflow, /UISupportedInterfaceOrientations json/);
     assert.match(workflow, /All interface orientations must be supported/);
-    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 4);
+    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 5);
     assert.doesNotMatch(workflow, /^\s+(push|pull_request|schedule):/m);
     assert.doesNotMatch(workflow, /secrets\.|upload_to_testflight|app-store-connect|vercel|curl|\.env/);
     assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
@@ -254,11 +254,35 @@ const checks = [
     assert.match(workflow, /compile_startup_timing:\s+description:[^\r\n]+\s+type: boolean\s+required: false\s+default: false/);
     assert.match(workflow, /if: \$\{\{ inputs\.compile_startup_timing \}\}[\s\S]*?PHRABIT_OFFLINE_STARTUP_TIMING[\s\S]*?CODE_SIGNING_ALLOWED=NO/);
     assert.doesNotMatch(read("project.yml"), /PHRABIT_OFFLINE_STARTUP_TIMING/);
-    const offline = read("App/CapturePreviewAuthView.swift").match(/#if PHRABIT_OFFLINE_STARTUP_TIMING([\s\S]*?)#else/)?.[1];
+    const offline = read("App/CapturePreviewAuthView.swift").match(/#elseif PHRABIT_OFFLINE_STARTUP_TIMING \|\| PHRABIT_OFFLINE_TRANSLATION_HOME([\s\S]*?)#else/)?.[1];
     assert.ok(offline);
     assert.match(offline, /PhrabitPreviewAuthOnly[\s\S]*?mode = \.invalid[\s\S]*?MockCaptureProcessor/);
     assert.doesNotMatch(offline, /CaptureHTTPProcessor|Supabase|fetch|URLSession/);
     assert.match(read("Shared/CaptureLaunchRequest.swift"), /removeObject\(forKey: timingKey\)/);
+  }],
+  ["translation home is opt-in and preserves explicit microphone and Stop actions", () => {
+    const workflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
+    assert.match(workflow, /compile_translation_home:\s+description:[^\r\n]+\s+type: boolean\s+required: false\s+default: false/);
+    assert.match(workflow, /if: \$\{\{ inputs\.compile_translation_home \}\}[\s\S]*?PHRABIT_OFFLINE_TRANSLATION_HOME[\s\S]*?CODE_SIGNING_ALLOWED=NO/);
+    assert.doesNotMatch(read("project.yml"), /PHRABIT_OFFLINE_TRANSLATION_HOME/);
+    const launch = read("App/CapturePreviewAuthView.swift");
+    assert.match(launch, /#if PHRABIT_OFFLINE_STARTUP_TIMING && PHRABIT_OFFLINE_TRANSLATION_HOME\s+mode = \.invalid/);
+    const app = read("App/PhrabitCaptureApp.swift");
+    assert.match(app, /if scenePhase == \.active \{\s+model\.handlePendingLaunch\(\)/);
+    assert.match(app, /case \.background:\s+model\.stopForBackground\(\)/);
+    const model = read("App/CaptureViewModel.swift");
+    assert.match(model, /guard isMock, translationMicrophoneSetup == \.explainPermission, !session\.isBusy/);
+    const settingsReturn = model.split("func refreshTranslationMicrophoneSetup()")[1]?.split("func submitTranslationDraft")[0];
+    assert.ok(settingsReturn);
+    assert.doesNotMatch(settingsReturn, /beginRecording|requestTranslationHomeRecording/);
+    const timeout = model.match(/onTimeLimit = \{[\s\S]*?#if PHRABIT_OFFLINE_TRANSLATION_HOME([\s\S]*?)#else/)?.[1];
+    assert.ok(timeout);
+    assert.match(timeout, /recordingFailed/);
+    assert.doesNotMatch(timeout, /stopAndTranslate/);
+    const view = read("App/TranslationHomeView.swift");
+    assert.match(view, /Button\(action: model\.stopAndTranslate\)/);
+    assert.match(view, /Button\("キャンセル", action: model\.cancel\)/);
+    assert.doesNotMatch(view, /https?:|URLSession|CaptureHTTPProcessor/);
   }],
   ["offline prototype privacy declarations match the native APIs", () => {
     const applicationPrivacy = read("App/PrivacyInfo.xcprivacy");

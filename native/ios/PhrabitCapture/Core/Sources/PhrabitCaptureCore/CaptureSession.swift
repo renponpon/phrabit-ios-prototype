@@ -60,6 +60,15 @@ public struct CaptureSession: Sendable {
         return identifier
     }
 
+    public mutating func beginTypedTranslation(language: CaptureLanguage) -> UUID? {
+        guard !isBusy else { return nil }
+        let identifier = UUID()
+        operationID = identifier
+        self.language = language
+        state = .translating
+        return identifier
+    }
+
     public mutating func recordingBegan(for identifier: UUID) {
         guard operationID == identifier, state == .preparing else { return }
         state = .recording
