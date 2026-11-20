@@ -24,6 +24,11 @@ struct CaptureView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     content
+                    #if PHRABIT_OFFLINE_STARTUP_TIMING
+                    if !model.session.isBusy, let timing = model.startupTiming {
+                        startupTimingReport(timing)
+                    }
+                    #endif
                 }
                 .frame(maxWidth: 600, alignment: .leading)
                 .frame(maxWidth: .infinity)
@@ -56,6 +61,40 @@ struct CaptureView: View {
             }
         }
     }
+
+    #if PHRABIT_OFFLINE_STARTUP_TIMING
+    private func startupTimingReport(_ timing: CaptureStartupTiming) -> some View {
+        let rows: [(CaptureStartupTiming.Segment, String)] = [
+            (.intentToActive, "起動要求 → アプリの録音処理"),
+            (.activeToPermission, "録音処理 → マイク許可の確認"),
+            (.audioSession, "音声セッションの起動"),
+            (.recorderPreparation, "録音ファイル・レコーダーの準備"),
+            (.recordCall, "録音開始の呼び出し"),
+            (.readySignal, "録音開始 → アプリの合図"),
+            (.activeToReady, "録音処理 → アプリの合図"),
+            (.intentToReady, "起動要求 → アプリの合図"),
+        ]
+        let measured = rows.compactMap { segment, label in
+            timing.milliseconds(for: segment).map { "\(label)：\($0) ms" }
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("録音開始の計測（端末内のみ）").font(.headline)
+            Text(timing.intentUptime == nil ? "アプリ内操作、または起動要求の時刻なし" : "ロック画面からの起動要求あり")
+                .font(.caption)
+            if measured.isEmpty {
+                Text("計測できる区間まで進みませんでした。")
+            } else {
+                Text(measured.joined(separator: "\n"))
+                    .monospacedDigit()
+                    .textSelection(.enabled)
+            }
+            Text("押し始めから起動要求までの時間は、ここには含まれません。").font(.caption)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(surface, in: RoundedRectangle(cornerRadius: 16))
+    }
+    #endif
 
     private var header: some View {
         HStack(spacing: 10) {

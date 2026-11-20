@@ -23,6 +23,9 @@ final class CaptureViewModel: ObservableObject {
     private let authenticationRequired: () -> Void
     @Published var accessSetupRequested = false
     @Published private(set) var recognizedText: String?
+    #if PHRABIT_OFFLINE_STARTUP_TIMING
+    private(set) var startupTiming: CaptureStartupTiming?
+    #endif
     private var uploadMayHaveStarted = false
     private var operationTask: Task<Void, Never>?
 
@@ -55,32 +58,64 @@ final class CaptureViewModel: ObservableObject {
     }
 
     func handlePendingLaunch() {
+        #if PHRABIT_OFFLINE_STARTUP_TIMING
+        var intentUptime: TimeInterval?
+        guard CaptureLaunchRequest.consume(onIntentUptime: { intentUptime = $0 }), !session.isBusy else { return }
+        #else
         guard CaptureLaunchRequest.consume(), !session.isBusy else { return }
+        let intentUptime: TimeInterval? = nil
+        #endif
         guard recordingAllowed() else { accessSetupRequested = true; return }
         if setupComplete {
-            startRecording()
+            beginRecording(intentUptime: intentUptime)
         }
     }
 
     func startRecording() {
+        beginRecording(intentUptime: nil)
+    }
+
+    private func beginRecording(intentUptime: TimeInterval?) {
+        #if PHRABIT_OFFLINE_STARTUP_TIMING
+        let handlingUptime = ProcessInfo.processInfo.systemUptime
+        #endif
         guard recordingAllowed() else { accessSetupRequested = true; return }
         guard let identifier = session.begin(language: language) else { return }
+        #if PHRABIT_OFFLINE_STARTUP_TIMING
+        startupTiming = nil
+        #endif
         recognizedText = nil
         uploadMayHaveStarted = false
         operationTask = Task { [weak self] in
             guard let self else { return }
+            #if PHRABIT_OFFLINE_STARTUP_TIMING
+            var timing = CaptureStartupTiming(intentUptime: intentUptime, handlingUptime: handlingUptime)
+            #endif
             do {
+                #if PHRABIT_OFFLINE_STARTUP_TIMING
+                try await self.recorder.start(authorized: self.recordingAllowed, onStartup: { checkpoint in
+                    timing.mark(checkpoint, at: ProcessInfo.processInfo.systemUptime)
+                })
+                #else
                 try await self.recorder.start(authorized: self.recordingAllowed)
+                #endif
                 guard self.session.operationID == identifier else { return }
                 self.recordingStartedAt = Date()
                 self.session.recordingBegan(for: identifier)
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                #if PHRABIT_OFFLINE_STARTUP_TIMING
+                timing.mark(.readySignal, at: ProcessInfo.processInfo.systemUptime)
+                self.startupTiming = timing
+                #endif
                 if !self.setupComplete {
                     self.setupComplete = true
                     UserDefaults.standard.set(true, forKey: Self.setupKey)
                 }
             } catch is CancellationError {
             } catch {
+                #if PHRABIT_OFFLINE_STARTUP_TIMING
+                if self.session.operationID == identifier { self.startupTiming = timing }
+                #endif
                 if !self.recordingAllowed() { self.accessSetupRequested = true }
                 self.session.fail(error.localizedDescription, for: identifier)
             }

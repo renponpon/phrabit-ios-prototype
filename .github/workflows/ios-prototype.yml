@@ -13,6 +13,11 @@ on:
         type: boolean
         required: false
         default: false
+      compile_startup_timing:
+        description: 送信なしの録音開始計測版を未署名でビルド（接続設定・鍵・配布なし）
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -186,4 +191,39 @@ jobs:
             echo 'The unsigned pilot compile must not contain connection settings.'
             exit 1
           fi
+      - name: Build offline startup timing app and control without signing
+        if: ${{ inputs.compile_startup_timing }}
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          cat > startup-timing-build.yml <<'YAML'
+          include: [project.yml]
+          settings:
+            configs:
+              Debug:
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) PHRABIT_OFFLINE_STARTUP_TIMING'
+          YAML
+          xcodegen generate --spec startup-timing-build.yml
+          mkdir -p PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          cp Core/Package.resolved PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          xcodebuild \
+            -project PhrabitCapture.xcodeproj \
+            -scheme PhrabitCapture \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/TimingDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -onlyUsePackageVersionsFromResolvedFile \
+            build
+          app=build/TimingDerivedData/Build/Products/Debug-iphoneos/PhrabitCapture.app
+          control="$app/PlugIns/PhrabitCaptureControl.appex"
+          for bundle in "$app" "$control"; do
+            test -f "$bundle/Info.plist"
+            test ! -e "$bundle/embedded.mobileprovision"
+            test ! -d "$bundle/_CodeSignature"
+            if plutil -extract PhrabitPreviewAuthOnly json -o /dev/null "$bundle/Info.plist" 2>/dev/null; then
+              echo 'The timing build must not contain connection settings.'
+              exit 1
+            fi
+          done
 

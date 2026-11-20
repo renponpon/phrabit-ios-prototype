@@ -60,7 +60,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         }
     }
 
-    func start(authorized: () -> Bool) async throws {
+    func start(authorized: () -> Bool, onStartup: (CaptureStartupTiming.Checkpoint) -> Void = { _ in }) async throws {
         let permitted: Bool
         switch AVAudioApplication.shared.recordPermission {
         case .granted:
@@ -79,11 +79,13 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         try Task.checkCancellation()
         guard authorized() else { throw CaptureAccessError.authentication }
         guard permitted else { throw RecordingError.permissionDenied }
+        onStartup(.permissionResolved)
 
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.record, mode: .default, options: [])
         try audioSession.setAllowHapticsAndSystemSoundsDuringRecording(true)
         try audioSession.setActive(true)
+        onStartup(.audioSessionActive)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("phrabit-\(UUID().uuidString).m4a")
         recordingURL = url
 
@@ -102,11 +104,15 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
             recorder = audioRecorder
             audioRecorder.delegate = self
             try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: url.path)
-            guard audioRecorder.prepareToRecord(),
-                  audioRecorder.record(forDuration: CaptureSession.maximumRecordingDuration) else {
+            guard audioRecorder.prepareToRecord() else {
+                throw RecordingError.unavailable
+            }
+            onStartup(.recorderPrepared)
+            guard audioRecorder.record(forDuration: CaptureSession.maximumRecordingDuration) else {
                 throw RecordingError.unavailable
             }
             startedAtUptime = ProcessInfo.processInfo.systemUptime
+            onStartup(.recorderStarted)
         } catch {
             cancel()
             throw error

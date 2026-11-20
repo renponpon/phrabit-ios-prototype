@@ -16,6 +16,13 @@ final class CapturePreviewAuthLaunch: ObservableObject {
 
     init(bundle: Bundle = .main) {
         let diagnosticsOnly = bundle.object(forInfoDictionaryKey: "PhrabitDiagnosticsOnly") as? Bool == true
+        #if PHRABIT_OFFLINE_STARTUP_TIMING
+        if diagnosticsOnly || bundle.object(forInfoDictionaryKey: "PhrabitPreviewAuthOnly") != nil {
+            mode = .invalid
+        } else {
+            mode = .offline(CaptureViewModel(processor: MockCaptureProcessor()), .mock())
+        }
+        #else
         guard let values = bundle.object(forInfoDictionaryKey: "PhrabitPreviewAuthOnly") else {
             if diagnosticsOnly {
                 mode = .invalid
@@ -85,6 +92,7 @@ final class CapturePreviewAuthLaunch: ObservableObject {
         } else {
             mode = .preview(access, diagnostics, usesCaptureEdge: usesCaptureEdge, audioAccessOnly: audioAccessOnly)
         }
+        #endif
     }
 
     private static func supportsLiveAudio(_ settings: [String: String]) -> Bool {

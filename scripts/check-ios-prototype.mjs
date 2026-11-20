@@ -244,10 +244,21 @@ const checks = [
     assert.match(workflow, /Verify unsigned iPhone archive identifiers and privacy/);
     assert.match(workflow, /UISupportedInterfaceOrientations json/);
     assert.match(workflow, /All interface orientations must be supported/);
-    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 3);
+    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 4);
     assert.doesNotMatch(workflow, /^\s+(push|pull_request|schedule):/m);
     assert.doesNotMatch(workflow, /secrets\.|upload_to_testflight|app-store-connect|vercel|curl|\.env/);
     assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
+  }],
+  ["startup timing is opt-in, unsigned, and cannot connect to a server", () => {
+    const workflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
+    assert.match(workflow, /compile_startup_timing:\s+description:[^\r\n]+\s+type: boolean\s+required: false\s+default: false/);
+    assert.match(workflow, /if: \$\{\{ inputs\.compile_startup_timing \}\}[\s\S]*?PHRABIT_OFFLINE_STARTUP_TIMING[\s\S]*?CODE_SIGNING_ALLOWED=NO/);
+    assert.doesNotMatch(read("project.yml"), /PHRABIT_OFFLINE_STARTUP_TIMING/);
+    const offline = read("App/CapturePreviewAuthView.swift").match(/#if PHRABIT_OFFLINE_STARTUP_TIMING([\s\S]*?)#else/)?.[1];
+    assert.ok(offline);
+    assert.match(offline, /PhrabitPreviewAuthOnly[\s\S]*?mode = \.invalid[\s\S]*?MockCaptureProcessor/);
+    assert.doesNotMatch(offline, /CaptureHTTPProcessor|Supabase|fetch|URLSession/);
+    assert.match(read("Shared/CaptureLaunchRequest.swift"), /removeObject\(forKey: timingKey\)/);
   }],
   ["offline prototype privacy declarations match the native APIs", () => {
     const applicationPrivacy = read("App/PrivacyInfo.xcprivacy");
