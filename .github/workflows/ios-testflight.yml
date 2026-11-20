@@ -47,6 +47,11 @@ on:
         type: boolean
         required: false
         default: false
+      offline_startup_timing_internal:
+        description: 送信なしの録音計測版だけを内部提出（本人グループのみ・自動配布OFFを確認済み）
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -92,6 +97,7 @@ jobs:
           IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: ${{ inputs.preview_audio_pilot_archive_only }}
           IOS_PREVIEW_AUDIO_PILOT_UPLOAD_INTERNAL: ${{ inputs.preview_audio_pilot_upload_internal }}
           IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: ${{ inputs.confirm_audio_pilot_no_auto_distribution }}
+          IOS_OFFLINE_STARTUP_TIMING_INTERNAL: ${{ inputs.offline_startup_timing_internal }}
           IOS_PREVIEW_PROJECT_REF: ${{ secrets.IOS_PREVIEW_PROJECT_REF }}
           IOS_PREVIEW_PUBLISHABLE_KEY: ${{ secrets.IOS_PREVIEW_PUBLISHABLE_KEY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -103,7 +109,7 @@ jobs:
       - name: Build and verify signed iPhone archive
         run: node scripts/ios-testflight.mjs build
       - name: Upload to App Store Connect for internal testing
-        if: ${{ !inputs.preview_audio_pilot_archive_only && !inputs.preview_audio_pilot_upload_internal }}
+        if: ${{ !inputs.preview_audio_pilot_archive_only && !inputs.preview_audio_pilot_upload_internal && !inputs.offline_startup_timing_internal }}
         env:
           ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -116,6 +122,13 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: node scripts/ios-testflight.mjs upload-audio-pilot
+      - name: Submit the offline startup timing build for internal testing only
+        if: ${{ inputs.offline_startup_timing_internal }}
+        env:
+          ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: node scripts/ios-testflight.mjs upload-startup-timing
       - name: Remove temporary signing and upload material
         if: ${{ always() }}
         run: node scripts/ios-testflight.mjs cleanup
