@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { approvedPreviewProjectDigest, assertTestFlightUploadAllowed, audioPilotMode, classifyCommandFailure, dependencyRevisions, distributionSpec, inspectEncryptionEvidence, offlineStartupTimingMode, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
+import { approvedPreviewProjectDigest, assertTestFlightUploadAllowed, audioPilotMode, classifyCommandFailure, dependencyRevisions, distributionSpec, inspectEncryptionEvidence, offlineInternalVariant, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
 
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
@@ -185,8 +185,8 @@ test('audio pilot draft includes retained text and usage metadata for functional
 
 test('the runner skips Apple upload and script denies it before reading credentials', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only && !inputs\.preview_audio_pilot_upload_internal && !inputs\.offline_startup_timing_internal \}\}/);
-  assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.preview_audio_pilot_upload_internal && !inputs\.preview_audio_pilot_archive_only && inputs\.confirm_audio_pilot_no_auto_distribution \}\}/);
+  assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only && !inputs\.preview_audio_pilot_upload_internal && inputs\.offline_internal_variant == 'none' \}\}/);
+  assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.preview_audio_pilot_upload_internal && !inputs\.preview_audio_pilot_archive_only && inputs\.confirm_audio_pilot_no_auto_distribution && inputs\.offline_internal_variant == 'none' \}\}/);
   assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
   for (const unapproved of ['archive', 'internal-upload', undefined, false]) {
     assert.throws(() => assertTestFlightUploadAllowed({ audioPilotMode: unapproved }, false), /Ordinary upload cannot submit/);
@@ -219,44 +219,93 @@ test('direct upload command rejects a pilot even without access to its package o
   }
 });
 
-test('offline startup timing is opt-in and excludes all online modes', () => {
-  const timing = { IOS_OFFLINE_STARTUP_TIMING_INTERNAL: 'true' };
-  assert.equal(offlineStartupTimingMode({}), false);
-  assert.equal(offlineStartupTimingMode(timing), true);
-  assert.throws(() => offlineStartupTimingMode({ IOS_OFFLINE_STARTUP_TIMING_INTERNAL: 'yes' }), /Invalid offline startup timing mode/);
-  for (const conflict of ['IOS_PREVIEW_AUTH_ONLY', 'IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
-    assert.throws(() => offlineStartupTimingMode({ ...timing, [conflict]: 'true' }), /excludes Preview modes/);
+test('offline variants are opt-in and reject online modes and settings', () => {
+  assert.equal(offlineInternalVariant({}), 'none');
+  for (const invalid of ['yes', '', 'translation-home,startup-timing']) {
+    assert.throws(() => offlineInternalVariant({ IOS_OFFLINE_INTERNAL_VARIANT: invalid }), /Invalid offline internal variant/);
   }
-  assert.throws(() => offlineStartupTimingMode({ ...timing, IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'true' }), /excludes an audio pilot/);
-  assert.throws(() => offlineStartupTimingMode({ ...timing, IOS_PREVIEW_AUDIO_PILOT_UPLOAD_INTERNAL: 'true', IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: 'true' }), /excludes an audio pilot/);
+  for (const variant of ['startup-timing', 'translation-home']) {
+    const selected = { IOS_OFFLINE_INTERNAL_VARIANT: variant };
+    assert.equal(offlineInternalVariant(selected), variant);
+    for (const conflict of ['IOS_PREVIEW_AUTH_ONLY', 'IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
+      assert.throws(() => offlineInternalVariant({ ...selected, [conflict]: 'true' }), /exclude Preview modes/);
+    }
+    assert.throws(() => offlineInternalVariant({ ...selected, IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'true' }), /exclude an audio pilot/);
+    assert.throws(() => offlineInternalVariant({ ...selected, IOS_PREVIEW_AUDIO_PILOT_UPLOAD_INTERNAL: 'true', IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: 'true' }), /exclude an audio pilot/);
+    for (const setting of ['IOS_PREVIEW_PROJECT_REF', 'IOS_PREVIEW_PUBLISHABLE_KEY']) {
+      assert.throws(() => offlineInternalVariant({ ...selected, [setting]: 'synthetic' }), /must not receive Preview settings/);
+    }
+  }
 });
 
-test('timing signs both targets offline, without injecting a compliance answer', () => {
-  const build = distributionSpec('TESTTEAM01', appUuid, controlUuid, '14.1', undefined, true);
-  for (const target of Object.values(build.targets)) {
-    assert.match(target.settings.configs.Release.SWIFT_ACTIVE_COMPILATION_CONDITIONS, /PHRABIT_OFFLINE_STARTUP_TIMING/);
-    assert.equal(target.info.properties.PhrabitOfflineStartupTiming, true);
-    assert.equal(target.info.properties.PhrabitPreviewAuthOnly, undefined);
-    assert.equal(target.info.properties.ITSAppUsesNonExemptEncryption, undefined);
+test('each offline variant signs both targets without the other variant or a compliance answer', () => {
+  const variants = [
+    ['startup-timing', 'PHRABIT_OFFLINE_STARTUP_TIMING', 'PhrabitOfflineStartupTiming', 'PhrabitOfflineTranslationHome'],
+    ['translation-home', 'PHRABIT_OFFLINE_TRANSLATION_HOME', 'PhrabitOfflineTranslationHome', 'PhrabitOfflineStartupTiming']
+  ];
+  for (const [variant, flag, marker, otherMarker] of variants) {
+    const build = distributionSpec('TESTTEAM01', appUuid, controlUuid, '14.1', undefined, variant);
+    for (const target of Object.values(build.targets)) {
+      assert.equal(target.settings.configs.Release.SWIFT_ACTIVE_COMPILATION_CONDITIONS, `$(inherited) ${flag}`);
+      assert.equal(target.info.properties[marker], true);
+      for (const property of [otherMarker, 'PhrabitPreviewAuthOnly', 'PhrabitDiagnosticsOnly', 'ITSAppUsesNonExemptEncryption', 'ITSEncryptionExportComplianceCode']) {
+        assert.equal(Object.hasOwn(target.info.properties, property), false);
+      }
+    }
+    assert.match(build.targets.PhrabitCapture.info.properties.NSMicrophoneUsageDescription, /音声は端末外へ送信せず/);
+    assert.throws(() => distributionSpec('TESTTEAM01', appUuid, controlUuid, '14.1', {}, variant), /cannot embed a Preview configuration/);
   }
-  assert.match(build.targets.PhrabitCapture.info.properties.NSMicrophoneUsageDescription, /音声は端末外へ送信せず/);
-  assert.throws(() => distributionSpec('TESTTEAM01', appUuid, controlUuid, '14.1', {}, true), /cannot embed a Preview configuration/);
   const usual = distributionSpec('TESTTEAM01', appUuid, controlUuid, '14.1');
   assert.equal(usual.targets.PhrabitCapture.info.properties.PhrabitOfflineStartupTiming, undefined);
+  assert.equal(usual.targets.PhrabitCapture.info.properties.PhrabitOfflineTranslationHome, undefined);
   assert.equal(usual.targets.PhrabitCaptureControl.settings.configs, undefined);
 });
 
-test('timing submission is isolated and denied until inspection passes', () => {
-  const valid = { audioPilotMode: null, offlineStartupTiming: true, previewAuthOnly: false, startupTimingInspectionPassed: true };
-  assert.doesNotThrow(() => assertTestFlightUploadAllowed(valid, false, true));
-  assert.throws(() => assertTestFlightUploadAllowed(valid, false), /separate internal upload stage/);
-  assert.throws(() => assertTestFlightUploadAllowed(valid, true), /separate internal upload stage/);
-  for (const override of [{ startupTimingInspectionPassed: false }, { offlineStartupTiming: false }, { previewAuthOnly: true }, { audioPilotMode: 'internal-upload' }]) {
-    assert.throws(() => assertTestFlightUploadAllowed({ ...valid, ...override }, false, true), /completed offline binary check/);
+test('offline submissions require the inspected exact variant and are isolated from normal and pilot upload', () => {
+  for (const [variant, otherVariant] of [['startup-timing', 'translation-home'], ['translation-home', 'startup-timing']]) {
+    const valid = { audioPilotMode: null, offlineInternalVariant: variant, previewAuthOnly: false, offlineInspectionPassed: true };
+    assert.doesNotThrow(() => assertTestFlightUploadAllowed(valid, false, variant));
+    assert.throws(() => assertTestFlightUploadAllowed(valid, false), /separate internal upload stage/);
+    assert.throws(() => assertTestFlightUploadAllowed(valid, true), /separate internal upload stage/);
+    assert.throws(() => assertTestFlightUploadAllowed(valid, true, variant), /modes are exclusive/);
+    assert.throws(() => assertTestFlightUploadAllowed(valid, false, otherVariant), /exact variant match/);
+    for (const override of [{ offlineInspectionPassed: false }, { offlineInternalVariant: 'none' }, { previewAuthOnly: true }, { audioPilotMode: 'internal-upload' }]) {
+      assert.throws(() => assertTestFlightUploadAllowed({ ...valid, ...override }, false, variant), /completed offline binary check/);
+    }
   }
   const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /offline_startup_timing_internal:\s+description:[^\r\n]+\s+type: boolean\s+required: false\s+default: false/);
-  assert.match(workflow, /name: Submit the offline startup timing build for internal testing only\s+if: \$\{\{ inputs\.offline_startup_timing_internal \}\}[\s\S]*?run: node scripts\/ios-testflight\.mjs upload-startup-timing/);
+  assert.match(workflow, /offline_internal_variant:\s+description:[^\r\n]+\s+type: choice\s+required: false\s+default: 'none'\s+options:\s+- 'none'\s+- startup-timing\s+- translation-home/);
+  assert.match(workflow, /name: Submit the inspected offline build for internal testing only\s+if: \$\{\{ inputs\.offline_internal_variant == 'startup-timing' \|\| inputs\.offline_internal_variant == 'translation-home' \}\}\s+env:\s+IOS_OFFLINE_INTERNAL_VARIANT: \$\{\{ inputs\.offline_internal_variant \}\}[\s\S]*?run: node scripts\/ios-testflight\.mjs upload-offline/);
+  for (const setting of ['IOS_PREVIEW_PROJECT_REF', 'IOS_PREVIEW_PUBLISHABLE_KEY']) {
+    assert.ok(workflow.includes(`${setting}: \${{ inputs.offline_internal_variant == 'none' && secrets.${setting} || '' }}`));
+  }
+});
+
+test('direct offline upload rejects an omitted or mismatched variant before reading Apple credentials', () => {
+  const runner = mkdtempSync(path.join(tmpdir(), 'phrabit-offline-upload-test-'));
+  const privateDirectory = path.join(runner, 'phrabit-testflight');
+  const statePath = path.join(privateDirectory, 'state.json');
+  try {
+    mkdirSync(privateDirectory);
+    writeFileSync(statePath, JSON.stringify({
+      audioPilotMode: null, offlineInternalVariant: 'translation-home', previewAuthOnly: false, offlineInspectionPassed: true,
+    }));
+    const script = fileURLToPath(new URL('./ios-testflight.mjs', import.meta.url));
+    for (const [settings, message] of [
+      [{}, /Explicit offline variant required/],
+      [{ IOS_OFFLINE_INTERNAL_VARIANT: 'startup-timing' }, /exact variant match/],
+    ]) {
+      const result = spawnSync(process.execPath, [script, 'upload-offline'], {
+        env: { ...approved, ...settings, RUNNER_TEMP: runner }, encoding: 'utf8', timeout: 5_000,
+      });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, message);
+    }
+  } finally {
+    unlinkSync(statePath);
+    rmdirSync(privateDirectory);
+    rmdirSync(runner);
+  }
 });
 
 test('pilot upload is distinct from archive-only and requires an independent group check', () => {

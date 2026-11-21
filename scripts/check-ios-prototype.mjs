@@ -164,10 +164,10 @@ const checks = [
     }
     assert.match(workflow, /preview_audio_pilot_archive_only:[\s\S]*?default: false/);
     assert.match(workflow, /preview_audio_pilot_upload_internal:[\s\S]*?default: false/);
-    assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only && !inputs\.preview_audio_pilot_upload_internal && !inputs\.offline_startup_timing_internal \}\}/);
-    assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.preview_audio_pilot_upload_internal && !inputs\.preview_audio_pilot_archive_only && inputs\.confirm_audio_pilot_no_auto_distribution \}\}/);
-    assert.match(distribution, /if \(pilotMode \|\| offlineStartupTiming\) options\.destination = 'export'/);
-    assert.match(distribution, /stage === 'upload' \|\| stage === 'upload-audio-pilot' \|\| stage === 'upload-startup-timing'\) \{\s+const state = readState\(\);\s+assertTestFlightUploadAllowed\(state, stage === 'upload-audio-pilot', stage === 'upload-startup-timing'\);/);
+    assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only && !inputs\.preview_audio_pilot_upload_internal && inputs\.offline_internal_variant == 'none' \}\}/);
+    assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.preview_audio_pilot_upload_internal && !inputs\.preview_audio_pilot_archive_only && inputs\.confirm_audio_pilot_no_auto_distribution && inputs\.offline_internal_variant == 'none' \}\}/);
+    assert.match(distribution, /if \(pilotMode \|\| offline\) options\.destination = 'export'/);
+    assert.match(distribution, /stage === 'upload' \|\| stage === 'upload-audio-pilot' \|\| stage === 'upload-offline'\) \{\s+const state = readState\(\);[\s\S]*?assertTestFlightUploadAllowed\(state, stage === 'upload-audio-pilot', requestedOfflineVariant\);/);
   }],
   ["new-path diagnostics only visits the authenticated GET and cannot queue a recording", () => {
     const app = read("App/PhrabitCaptureApp.swift");

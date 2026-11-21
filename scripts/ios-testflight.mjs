@@ -10,8 +10,24 @@ export const approvedPreviewProjectDigest = '34f9aba9cefba7372e95560573ca702cb13
 const audioPilotContract = 'capture-audio-pilot-v1';
 const audioPilotFlag = 'PHRABIT_LOCAL_LIVE_AUDIO';
 const audioPilotMicrophoneDescription = '本人限定の音声翻訳テストに使います。「停止して翻訳」を押したときだけ録音をOpenAIへ、認識した文章をGoogle Geminiへ送信します。';
-const startupTimingFlag = 'PHRABIT_OFFLINE_STARTUP_TIMING';
-const startupTimingMicrophoneDescription = 'ロック画面から録音開始までの時間を計ります。音声は端末外へ送信せず、試行後に削除します。';
+const offlineBuilds = new Map([
+  ['startup-timing', {
+    flag: 'PHRABIT_OFFLINE_STARTUP_TIMING',
+    marker: 'PhrabitOfflineStartupTiming',
+    microphone: 'ロック画面から録音開始までの時間を計ります。音声は端末外へ送信せず、試行後に削除します。'
+  }],
+  ['translation-home', {
+    flag: 'PHRABIT_OFFLINE_TRANSLATION_HOME',
+    marker: 'PhrabitOfflineTranslationHome',
+    microphone: '翻訳画面で録音を試します。音声は端末外へ送信せず、録音の終了後に削除します。'
+  }]
+]);
+
+function offlineBuild(variant) {
+  if (variant === 'none') return undefined;
+  assert.ok(offlineBuilds.has(variant), 'Invalid offline internal variant');
+  return offlineBuilds.get(variant);
+}
 
 export function validateExecution(environment) {
   assert.equal(environment.GITHUB_ACTIONS, 'true', 'GitHub Actions is required');
@@ -32,15 +48,15 @@ export function audioPilotMode(environment) {
   return archiveOnly === 'true' ? 'archive' : internalUpload === 'true' ? 'internal-upload' : null;
 }
 
-export function offlineStartupTimingMode(environment) {
-  const flag = environment.IOS_OFFLINE_STARTUP_TIMING_INTERNAL ?? 'false';
-  assert.ok(['false', 'true'].includes(flag), 'Invalid offline startup timing mode');
-  if (flag === 'false') return false;
+export function offlineInternalVariant(environment) {
+  const variant = environment.IOS_OFFLINE_INTERNAL_VARIANT ?? 'none';
+  if (!offlineBuild(variant)) return variant;
   for (const other of ['IOS_PREVIEW_AUTH_ONLY', 'IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
-    assert.equal(environment[other] ?? 'false', 'false', 'Offline startup timing excludes Preview modes');
+    assert.equal(environment[other] ?? 'false', 'false', 'Offline internal builds exclude Preview modes');
   }
-  assert.equal(audioPilotMode(environment), null, 'Offline startup timing excludes an audio pilot');
-  return true;
+  assert.equal(audioPilotMode(environment), null, 'Offline internal builds exclude an audio pilot');
+  assert.ok(!environment.IOS_PREVIEW_PROJECT_REF && !environment.IOS_PREVIEW_PUBLISHABLE_KEY, 'Offline internal builds must not receive Preview settings');
+  return variant;
 }
 
 export function previewAuthSettings(environment) {
@@ -85,14 +101,14 @@ export function previewAuthPrivacyCategories(settings) {
   }));
 }
 
-export function assertTestFlightUploadAllowed(state, requestedPilotSubmission, requestedTimingSubmission = false) {
-  assert.ok(!(requestedPilotSubmission && requestedTimingSubmission), 'Upload modes are exclusive');
-  if (requestedTimingSubmission) {
-    assert.ok(state.offlineStartupTiming === true && state.previewAuthOnly === false &&
-      state.audioPilotMode === null && state.startupTimingInspectionPassed === true, 'Offline timing upload requires a completed offline binary check');
+export function assertTestFlightUploadAllowed(state, requestedPilotSubmission, requestedOfflineVariant = 'none') {
+  if (offlineBuild(requestedOfflineVariant)) {
+    assert.ok(!requestedPilotSubmission, 'Upload modes are exclusive');
+    assert.ok(state.offlineInternalVariant === requestedOfflineVariant && state.previewAuthOnly === false &&
+      state.audioPilotMode === null && state.offlineInspectionPassed === true, 'Offline upload requires an exact variant match and a completed offline binary check');
     return;
   }
-  assert.notEqual(state.offlineStartupTiming, true, 'Offline timing requires its separate internal upload stage');
+  assert.equal(state.offlineInternalVariant ?? 'none', 'none', 'Offline builds require their separate internal upload stage');
   if (!requestedPilotSubmission) {
     assert.equal(state.audioPilotMode, null, 'Ordinary upload cannot submit an audio pilot');
     return;
@@ -121,13 +137,14 @@ export function dependencyRevisions(contents) {
   }).sort(([left], [right]) => left.localeCompare(right));
 }
 
-export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, previewSettings, offlineStartupTiming = false) {
+export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, previewSettings, offlineVariant = 'none') {
   assert.match(teamId, /^[A-Z0-9]{10}$/);
   assert.match(appUuid, /^[A-F0-9-]{36}$/i);
   assert.match(controlUuid, /^[A-F0-9-]{36}$/i);
   assert.notEqual(appUuid, controlUuid);
   assert.match(buildNumber, /^[1-9]\d{0,3}\.[1-9]\d{0,3}$/);
-  assert.ok(!offlineStartupTiming || !previewSettings, 'Offline timing cannot embed a Preview configuration');
+  const offline = offlineBuild(offlineVariant);
+  assert.ok(!offline || !previewSettings, 'An offline build cannot embed a Preview configuration');
   const signing = {
     DEVELOPMENT_TEAM: teamId,
     CODE_SIGN_STYLE: 'Manual',
@@ -142,8 +159,8 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, prev
   if (diagnosticsOnly) assert.ok(!('LocalMockRecording' in previewSettings), 'Diagnostics cannot include recording');
   if (audioPilot) assert.ok(!('LocalMockRecording' in previewSettings), 'Audio pilot excludes local mock recording');
   const diagnosticsMarker = diagnosticsOnly ? { PhrabitDiagnosticsOnly: true } : {};
-  const timingMarker = offlineStartupTiming ? { PhrabitOfflineStartupTiming: true } : {};
-  const timingConditions = offlineStartupTiming ? { configs: { Release: { SWIFT_ACTIVE_COMPILATION_CONDITIONS: `$(inherited) ${startupTimingFlag}` } } } : {};
+  const offlineMarker = offline ? { [offline.marker]: true } : {};
+  const offlineConditions = offline ? { configs: { Release: { SWIFT_ACTIVE_COMPILATION_CONDITIONS: `$(inherited) ${offline.flag}` } } } : {};
   return {
     include: ['project.yml'],
     settings: { base: signing },
@@ -151,7 +168,7 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, prev
       PhrabitCapture: {
         settings: {
           base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: appUuid },
-          ...timingConditions,
+          ...offlineConditions,
           ...(audioPilot ? { configs: { Release: { SWIFT_ACTIVE_COMPILATION_CONDITIONS: `$(inherited) ${audioPilotFlag}` } } } : {})
         },
         info: previewSettings ? { properties: {
@@ -161,12 +178,12 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, prev
           NSMicrophoneUsageDescription: audioPilot ? audioPilotMicrophoneDescription : previewSettings.LocalMockRecording === 'true'
             ? '端末内で録音を試します。音声は送信せず、録音後に削除します。'
             : 'この接続検証版はマイクを使用しません。'
-        } } : offlineStartupTiming ? { properties: {
-          ...info.properties, ...timingMarker, NSMicrophoneUsageDescription: startupTimingMicrophoneDescription
+        } } : offline ? { properties: {
+          ...info.properties, ...offlineMarker, NSMicrophoneUsageDescription: offline.microphone
         } } : info
       },
-      PhrabitCaptureControl: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: controlUuid }, ...timingConditions },
-        info: { properties: { ...info.properties, ...diagnosticsMarker, ...timingMarker } } }
+      PhrabitCaptureControl: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: controlUuid }, ...offlineConditions },
+        info: { properties: { ...info.properties, ...diagnosticsMarker, ...offlineMarker } } }
     }
   };
 }
@@ -239,7 +256,8 @@ function main(stage) {
 
   validateExecution(environment);
   if (stage === 'prepare') {
-    const offlineStartupTiming = offlineStartupTimingMode(environment);
+    const offlineVariant = offlineInternalVariant(environment);
+    const offline = offlineBuild(offlineVariant);
     const previewSettings = previewAuthSettings(environment);
     const pilotMode = audioPilotMode(environment);
     mkdirSync(privateRoot, { mode: 0o700 });
@@ -294,12 +312,12 @@ function main(stage) {
     state.profileUuids = { PhrabitCapture: profiles[0].UUID, PhrabitCaptureControl: profiles[1].UUID };
     state.previewAuthOnly = Boolean(previewSettings);
     state.audioPilotMode = pilotMode;
-    state.offlineStartupTiming = offlineStartupTiming;
-    const spec = distributionSpec(requireSecret('APPLE_TEAM_ID'), profiles[0].UUID, profiles[1].UUID, state.buildNumber, previewSettings, offlineStartupTiming);
+    state.offlineInternalVariant = offlineVariant;
+    const spec = distributionSpec(requireSecret('APPLE_TEAM_ID'), profiles[0].UUID, profiles[1].UUID, state.buildNumber, previewSettings, offlineVariant);
     writeFileSync(path.join(prototype, 'distribution.json'), JSON.stringify(spec), { mode: 0o600 });
     const options = { method: 'app-store-connect', teamID: requireSecret('APPLE_TEAM_ID'), signingStyle: 'manual', signingCertificate: 'Apple Distribution', manageAppVersionAndBuildNumber: false, provisioningProfiles: { 'com.phrabit.app': profiles[0].UUID, 'com.phrabit.app.control': profiles[1].UUID } };
-    if (previewSettings || offlineStartupTiming) options.testFlightInternalTestingOnly = true;
-    if (pilotMode || offlineStartupTiming) options.destination = 'export';
+    if (previewSettings || offline) options.testFlightInternalTestingOnly = true;
+    if (pilotMode || offline) options.destination = 'export';
     writePrivate(path.join(privateRoot, 'export.json'), JSON.stringify(options));
     run('plutil', ['-convert', 'xml1', '-o', path.join(privateRoot, 'ExportOptions.plist'), path.join(privateRoot, 'export.json')], 'export-options');
     saveState(state);
@@ -308,21 +326,24 @@ function main(stage) {
     const state = readState();
     const infoProperties = JSON.parse(readFileSync(path.join(prototype, 'distribution.json'), 'utf8')).targets.PhrabitCapture.info.properties;
     const settings = infoProperties.PhrabitPreviewAuthOnly;
-    const offlineStartupTiming = state.offlineStartupTiming === true;
-    assert.equal(infoProperties.PhrabitOfflineStartupTiming === true, offlineStartupTiming, 'Timing build marker does not match runner state');
-    if (offlineStartupTiming) assert.ok(!settings && state.previewAuthOnly === false && state.audioPilotMode === null);
+    const offline = offlineBuild(state.offlineInternalVariant);
+    const offlineStartupTiming = state.offlineInternalVariant === 'startup-timing';
+    for (const variant of offlineBuilds.values()) {
+      assert.equal(infoProperties[variant.marker], variant === offline ? true : undefined, 'Offline build marker does not match runner state');
+    }
+    if (offline) assert.ok(!settings && state.previewAuthOnly === false && state.audioPilotMode === null);
     assert.ok([null, 'archive', 'internal-upload'].includes(state.audioPilotMode), 'Invalid runner audio pilot mode');
     const audioPilot = settings?.ConnectionCheck === audioPilotContract;
     assert.equal(audioPilot, state.audioPilotMode !== null, 'Archive mode does not match Preview settings');
     assert.match(run('xcodebuild', ['-version'], 'xcode-version'), /^Xcode 26\./);
     assert.match(run('xcrun', ['--sdk', 'iphoneos', '--show-sdk-version'], 'ios-sdk'), /^26\./);
-    if (state.previewAuthOnly || offlineStartupTiming) {
+    if (state.previewAuthOnly || offline) {
       const help = spawnSync('xcodebuild', ['-help'], { cwd: prototype, encoding: 'utf8' });
       assert.match(`${help.stdout ?? ''}\n${help.stderr ?? ''}`, /\btestFlightInternalTestingOnly\b/);
       if (state.previewAuthOnly) run('plutil', ['-replace', 'NSPrivacyCollectedDataTypes', '-json', JSON.stringify(previewAuthPrivacyCategories(settings)), 'App/PrivacyInfo.xcprivacy'], 'preview-auth-privacy');
       const exportOptions = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(privateRoot, 'ExportOptions.plist')], 'preview-export-settings'));
       assert.equal(exportOptions.testFlightInternalTestingOnly, true, 'The build must be internal only');
-      if (audioPilot || offlineStartupTiming) assert.equal(exportOptions.destination, 'export', 'The archive must be exported locally before any submission');
+      if (audioPilot || offline) assert.equal(exportOptions.destination, 'export', 'The archive must be exported locally before any submission');
     }
     if (offlineStartupTiming) {
       const controlManifest = 'Control/PrivacyInfo.xcprivacy';
@@ -331,7 +352,7 @@ function main(stage) {
       run('plutil', ['-replace', 'NSPrivacyAccessedAPITypes', '-json', JSON.stringify(types), controlManifest], 'control-timing-privacy');
     }
     run('xcodegen', ['generate', '--spec', 'distribution.json'], 'project-generate');
-    const inspectedBuild = audioPilot || offlineStartupTiming;
+    const inspectedBuild = audioPilot || Boolean(offline);
     const pinnedDependencies = inspectedBuild ? ['-onlyUsePackageVersionsFromResolvedFile'] : [];
     const archiveLock = path.join(prototype, 'PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved');
     let checkedInRevisions;
@@ -353,7 +374,9 @@ function main(stage) {
       assert.equal(targetSettings.CURRENT_PROJECT_VERSION, state.buildNumber, 'Target build version mismatch');
       const conditions = (targetSettings.SWIFT_ACTIVE_COMPILATION_CONDITIONS ?? '').split(/\s+/);
       assert.equal(conditions.includes(audioPilotFlag), audioPilot && target === 'PhrabitCapture', 'Audio pilot flag must be app-only');
-      assert.equal(conditions.includes(startupTimingFlag), offlineStartupTiming, 'Timing flag must match both targets');
+      for (const variant of offlineBuilds.values()) {
+        assert.equal(conditions.includes(variant.flag), variant === offline, 'Offline flags must match both targets');
+      }
     }
     console.log('Manual distribution identity, team, profile, and build version verified for both targets.');
     const archivePath = path.join(privateRoot, 'PhrabitCapture.xcarchive');
@@ -371,13 +394,19 @@ function main(stage) {
       if (inspectedBuild) {
         const info = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(bundlePath, 'Info.plist')], `${identifier}-inspection-info`));
         assert.ok(!('ITSAppUsesNonExemptEncryption' in info) && !('ITSEncryptionExportComplianceCode' in info), 'Export compliance answers must not be injected by CI');
-        if (offlineStartupTiming) {
-          assert.ok(info.PhrabitOfflineStartupTiming === true && !('PhrabitPreviewAuthOnly' in info) && !('PhrabitDiagnosticsOnly' in info), 'Timing archive must stay offline');
-          if (identifier === 'com.phrabit.app') assert.equal(info.NSMicrophoneUsageDescription, startupTimingMicrophoneDescription);
+        if (offline) {
+          for (const variant of offlineBuilds.values()) {
+            assert.equal(info[variant.marker], variant === offline ? true : undefined, 'Signed bundle has an incorrect offline marker');
+          }
+          assert.ok(!('PhrabitPreviewAuthOnly' in info) && !('PhrabitDiagnosticsOnly' in info), 'Offline archive must not contain Preview settings');
+          if (identifier === 'com.phrabit.app') assert.equal(info.NSMicrophoneUsageDescription, offline.microphone);
           const privacyManifest = path.join(bundlePath, 'PrivacyInfo.xcprivacy');
-          const collected = JSON.parse(run('plutil', ['-extract', 'NSPrivacyCollectedDataTypes', 'json', '-o', '-', privacyManifest], `${identifier}-timing-privacy`));
-          assert.deepEqual(collected, []);
-          assert.match(readFileSync(privacyManifest, 'utf8'), /NSPrivacyAccessedAPICategorySystemBootTime/);
+          const privacy = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', privacyManifest], `${identifier}-offline-privacy`));
+          assert.deepEqual(privacy.NSPrivacyCollectedDataTypes, []);
+          assert.equal(privacy.NSPrivacyTracking, false);
+          if (offlineStartupTiming) {
+            assert.ok(privacy.NSPrivacyAccessedAPITypes.some(entry => entry.NSPrivacyAccessedAPIType === 'NSPrivacyAccessedAPICategorySystemBootTime'));
+          }
         }
         assert.match(info.CFBundleExecutable ?? '', /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/);
         const executable = path.join(bundlePath, info.CFBundleExecutable);
@@ -424,16 +453,18 @@ function main(stage) {
       state.audioPilotInspectionPassed = true;
       console.log('Signed audio pilot inspection: locked dependencies verified, Apple OS crypto links found, no known bundled non-OS indicators, no export answers embedded.');
     }
-    if (offlineStartupTiming) {
-      state.startupTimingInspectionPassed = true;
-      console.log('Signed offline timing inspection: internal-only export, locked dependencies, offline settings only, no export answers embedded.');
+    if (offline) {
+      state.offlineInspectionPassed = true;
+      console.log(`Signed offline ${state.offlineInternalVariant} inspection: internal-only export, locked dependencies, offline settings only, no export answers embedded.`);
     }
     state.ipaPath = path.join(exportPath, packages[0]);
     saveState(state);
     console.log(`Signed iPhone build ${state.buildNumber} exported; app and control signatures verified.`);
-  } else if (stage === 'upload' || stage === 'upload-audio-pilot' || stage === 'upload-startup-timing') {
+  } else if (stage === 'upload' || stage === 'upload-audio-pilot' || stage === 'upload-offline') {
     const state = readState();
-    assertTestFlightUploadAllowed(state, stage === 'upload-audio-pilot', stage === 'upload-startup-timing');
+    const requestedOfflineVariant = stage === 'upload-offline' ? offlineInternalVariant(environment) : 'none';
+    assert.ok(stage !== 'upload-offline' || requestedOfflineVariant !== 'none', 'Explicit offline variant required for offline upload');
+    assertTestFlightUploadAllowed(state, stage === 'upload-audio-pilot', requestedOfflineVariant);
     assert.ok(state.ipaPath?.startsWith(privateRoot + path.sep));
     assert.match(requireSecret('ASC_KEY_ID'), /^[A-Z0-9]{10}$/);
     assert.match(requireSecret('ASC_ISSUER_ID'), /^[a-f0-9-]{36}$/i);
