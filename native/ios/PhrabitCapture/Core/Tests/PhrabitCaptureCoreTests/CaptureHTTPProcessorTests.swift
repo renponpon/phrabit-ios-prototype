@@ -135,21 +135,30 @@ final class CaptureHTTPProcessorTests: XCTestCase {
         let project = URL(string: "https://abcdefghijklmnopqrst.supabase.co")!
         let key = "sb_publishable_synthetic_testing_key"
         let configuration = try CaptureAuthConfiguration(apiOrigin: project, projectURL: project, publishableKey: key)
-        var calls = 0
+        var paths: [String] = []
         CaptureStubProtocol.handler = { request in
-            calls += 1
             XCTAssertEqual(request.url?.host, project.host)
-            XCTAssertEqual(request.url?.path, "/functions/v1/phrabit-capture-audio/transcribe")
             XCTAssertEqual(request.value(forHTTPHeaderField: "apikey"), key)
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-session")
             XCTAssertNil(request.value(forHTTPHeaderField: "x-vercel-protection-bypass"))
+            let requestPath = try XCTUnwrap(request.url?.path)
+            paths.append(requestPath)
+            if requestPath.hasSuffix("/translate") {
+                let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Self.body(of: request)) as? [String: String])
+                XCTAssertEqual(payload, ["sessionId": sessionID.uuidString, "sourceText": "こんにちは", "targetLanguage": "zh"])
+                return (200, try Self.translationResponse(sessionID, language: "zh"))
+            }
             let data = try JSONSerialization.data(withJSONObject: ["sessionId": sessionID.uuidString, "requestId": UUID().uuidString, "transcript": "こんにちは", "language": "ja"])
             return (200, data)
         }
         let processor = try CaptureHTTPProcessor(previewAudio: configuration, protocolClasses: [CaptureStubProtocol.self], consentGranted: { true }, accessToken: { "test-session" })
         let transcript = try await processor.transcribe(audio: Data([1, 2, 3]), durationMilliseconds: 1000, sessionID: identifier)
         XCTAssertEqual(transcript, "こんにちは")
-        XCTAssertEqual(calls, 1)
+        let translation = try await processor.translate(text: transcript, to: .chinese, sessionID: identifier)
+        XCTAssertEqual(translation.sourceText, transcript)
+        XCTAssertEqual(translation.targetText, "你好")
+        XCTAssertEqual(translation.reading, "nǐ hǎo")
+        XCTAssertEqual(paths, ["/functions/v1/phrabit-capture-audio/transcribe", "/functions/v1/phrabit-capture-audio/translate"])
     }
 
     func testConsentWithdrawnWhileGettingTokenBlocksAudio() async throws {

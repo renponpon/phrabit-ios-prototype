@@ -60,7 +60,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         }
     }
 
-    #if PHRABIT_OFFLINE_TRANSLATION_HOME
+    #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
     var translationMicrophonePermission: CaptureTranslationHomeRules.MicrophonePermission {
         switch AVAudioApplication.shared.recordPermission {
         case .granted: return .allowed

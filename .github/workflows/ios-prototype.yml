@@ -9,7 +9,7 @@ on:
         required: true
         default: false
       compile_audio_pilot:
-        description: 本人用の音声パイロット分岐も未署名でコンパイル（接続設定・鍵・配布なし）
+        description: 翻訳ホームの本人用音声パイロット分岐も未署名でコンパイル（接続設定・鍵・配布なし）
         type: boolean
         required: false
         default: false
@@ -175,7 +175,7 @@ jobs:
               settings:
                 configs:
                   Debug:
-                    SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) PHRABIT_LOCAL_LIVE_AUDIO'
+                    SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) PHRABIT_LOCAL_LIVE_AUDIO PHRABIT_PREVIEW_TRANSLATION_HOME'
           YAML
           xcodegen generate --spec pilot-build.yml
           mkdir -p PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm

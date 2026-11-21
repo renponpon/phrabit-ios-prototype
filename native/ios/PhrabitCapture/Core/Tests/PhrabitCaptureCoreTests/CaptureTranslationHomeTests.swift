@@ -8,6 +8,12 @@ final class CaptureTranslationHomeTests: XCTestCase {
         XCTAssertEqual(CaptureTranslationHomeRules.microphoneEntry(for: .allowed), .startRecording)
     }
 
+    func testMissingVerificationBlocksEveryMicrophoneEntry() {
+        for permission: CaptureTranslationHomeRules.MicrophonePermission in [.allowed, .notRequested, .denied] {
+            XCTAssertEqual(CaptureTranslationHomeRules.microphoneEntry(for: permission, recordingAllowed: false), .setupRequired)
+        }
+    }
+
     func testTypedInputRejectsEmptyOrOverLimitWithoutChangingContent() {
         XCTAssertNil(CaptureTranslationHomeRules.validatedText(" \n "))
         XCTAssertEqual(CaptureTranslationHomeRules.validatedText(" こんにちは\n"), "こんにちは")

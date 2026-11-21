@@ -1,10 +1,12 @@
-#if PHRABIT_OFFLINE_TRANSLATION_HOME
+#if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
 import PhrabitCaptureCore
 import SwiftUI
 import UIKit
 
 struct TranslationHomeView: View {
     @ObservedObject var model: CaptureViewModel
+    @ObservedObject var access: CaptureAccessController
+    var diagnostics: CaptureConnectionDiagnostics? = nil
     @Environment(\.openURL) private var openURL
     @FocusState private var editingDraft: Bool
     @AccessibilityFocusState private var resultFocused: Bool
@@ -22,7 +24,7 @@ struct TranslationHomeView: View {
             ScrollViewReader { scroll in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("オフライン試作 · 訳文は見本")
+                        Text(model.isMock ? "オフライン試作 · 訳文は見本" : "本人限定の音声翻訳テスト")
                             .font(.caption)
                             .foregroundStyle(mint)
                         content
@@ -52,6 +54,11 @@ struct TranslationHomeView: View {
         }
         .background(background.ignoresSafeArea())
         .tint(accent)
+        .sheet(isPresented: $model.accessSetupRequested) {
+            if !model.isMock {
+                CaptureAccessView(access: access, diagnostics: diagnostics, audioPilot: true)
+            }
+        }
     }
 
     private var header: some View {
@@ -71,6 +78,16 @@ struct TranslationHomeView: View {
             .frame(minHeight: 44)
             .padding(.horizontal, 8)
             .background(surface, in: Capsule())
+            if !model.isMock {
+                Button {
+                    editingDraft = false
+                    model.accessSetupRequested = true
+                } label: {
+                    Image(systemName: "gearshape").frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("ログインと送信設定")
+                .disabled(model.session.isBusy)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
@@ -97,15 +114,20 @@ struct TranslationHomeView: View {
                     }
                     .accessibilityHidden(true)
                 }
-                Text("音声は端末外へ送信されません。20秒で録音を破棄します。")
+                Text(model.isMock ? "音声は端末外へ送信されません。20秒で録音を破棄します。" :
+                     "「停止して翻訳」を押したときだけ、録音をOpenAIへ、認識文をGoogleのGeminiへ送ります。20秒で録音を破棄します。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
             .background(surface, in: RoundedRectangle(cornerRadius: 22))
-        case .recognizing, .translating:
-            statusCard("見本を準備中", detail: "入力や音声は送信していません。", showsProgress: true)
+        case .recognizing:
+            statusCard(model.isMock ? "見本を準備中" : "文字起こし中",
+                       detail: model.isMock ? "入力や音声は送信していません。" : "音声を文字に変換しています。", showsProgress: true)
+        case .translating:
+            statusCard(model.isMock ? "見本を準備中" : "翻訳中",
+                       detail: model.isMock ? "入力や音声は送信していません。" : "認識した日本語を翻訳しています。", showsProgress: true)
         case .idle, .result, .failed:
             if let setup = model.translationMicrophoneSetup { microphoneNotice(setup) }
             composer
@@ -137,7 +159,7 @@ struct TranslationHomeView: View {
                     .accessibilityLabel("日本語の入力")
             }
             HStack {
-                if draft.isEmpty {
+                if model.isMock && draft.isEmpty {
                     Button("例文を入れる") { draft = MockTranslator.sample(for: .chinese).sourceText }
                         .font(.footnote)
                         .frame(minHeight: 44)
@@ -158,15 +180,21 @@ struct TranslationHomeView: View {
                 .buttonStyle(.bordered)
                 .disabled(model.translationMicrophoneSetup != nil)
 
-                Button {
-                    editingDraft = false
-                    model.submitTranslationDraft(draft)
-                } label: {
-                    Text("翻訳").frame(maxWidth: .infinity, minHeight: 36)
+                if model.isMock {
+                    Button {
+                        editingDraft = false
+                        model.submitTranslationDraft(draft)
+                    } label: {
+                        Text("翻訳").frame(maxWidth: .infinity, minHeight: 36)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .foregroundStyle(background)
+                    .disabled(model.translationMicrophoneSetup != nil || CaptureTranslationHomeRules.validatedText(draft) == nil)
                 }
-                .buttonStyle(.borderedProminent)
-                .foregroundStyle(background)
-                .disabled(model.translationMicrophoneSetup != nil || CaptureTranslationHomeRules.validatedText(draft) == nil)
+            }
+            if !model.isMock {
+                Text("この検証版は音声翻訳のみ。入力欄の下書きは送信しません。")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
         }
         .padding(16)
@@ -216,7 +244,11 @@ struct TranslationHomeView: View {
 
     private func resultCard(_ translation: CaptureTranslation) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(translation.language.displayName)の訳文サンプル")
+            if !model.isMock {
+                Text("認識した日本語").font(.subheadline.bold()).foregroundStyle(.secondary)
+                Text(translation.sourceText).textSelection(.enabled)
+            }
+            Text(model.isMock ? "\(translation.language.displayName)の訳文サンプル" : "\(translation.language.displayName)の訳文")
                 .font(.subheadline.bold()).foregroundStyle(.secondary)
             Text(translation.targetText)
                 .font(.title.bold())
@@ -225,7 +257,8 @@ struct TranslationHomeView: View {
             if let reading = translation.reading {
                 Text(reading).font(.body).foregroundStyle(mint).textSelection(.enabled)
             }
-            Text("入力・録音内容の翻訳ではありません。").font(.footnote).foregroundStyle(.secondary)
+            Text(model.isMock ? "入力・録音内容の翻訳ではありません。" : "大切な内容は訳文を確認してください。")
+                .font(.footnote).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)

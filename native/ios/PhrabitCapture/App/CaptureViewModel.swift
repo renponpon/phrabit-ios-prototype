@@ -23,7 +23,7 @@ final class CaptureViewModel: ObservableObject {
     private let authenticationRequired: () -> Void
     @Published var accessSetupRequested = false
     @Published private(set) var recognizedText: String?
-    #if PHRABIT_OFFLINE_TRANSLATION_HOME
+    #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
     @Published private(set) var translationMicrophoneSetup: CaptureTranslationHomeRules.MicrophoneEntry?
     #endif
     #if PHRABIT_OFFLINE_STARTUP_TIMING
@@ -46,7 +46,7 @@ final class CaptureViewModel: ObservableObject {
         setupComplete = UserDefaults.standard.bool(forKey: Self.setupKey)
         recorder.onTimeLimit = { [weak self] in
             guard let self else { return }
-            #if PHRABIT_OFFLINE_TRANSLATION_HOME
+            #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
             self.recordingFailed("20秒に達したため録音を破棄しました。")
             #else
             if self.isMock {
@@ -72,30 +72,35 @@ final class CaptureViewModel: ObservableObject {
         guard CaptureLaunchRequest.consume(), !session.isBusy else { return }
         let intentUptime: TimeInterval? = nil
         #endif
-        guard recordingAllowed() else { accessSetupRequested = true; return }
-        #if PHRABIT_OFFLINE_TRANSLATION_HOME
+        #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
         requestTranslationHomeRecording()
         #else
+        guard recordingAllowed() else { accessSetupRequested = true; return }
         if setupComplete {
             beginRecording(intentUptime: intentUptime)
         }
         #endif
     }
 
-    #if PHRABIT_OFFLINE_TRANSLATION_HOME
+    #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
     func requestTranslationHomeRecording() {
-        guard isMock, !session.isBusy else { return }
-        let entry = CaptureTranslationHomeRules.microphoneEntry(for: recorder.translationMicrophonePermission)
-        if entry == .startRecording {
+        guard !session.isBusy, !accessSetupRequested else { return }
+        let entry = CaptureTranslationHomeRules.microphoneEntry(for: recorder.translationMicrophonePermission, recordingAllowed: recordingAllowed())
+        switch entry {
+        case .setupRequired:
+            translationMicrophoneSetup = nil
+            accessSetupRequested = true
+        case .startRecording:
             translationMicrophoneSetup = nil
             beginRecording(intentUptime: nil)
-        } else {
+        case .explainPermission, .settingsRequired:
             translationMicrophoneSetup = entry
         }
     }
 
     func allowMicrophoneAndRecord() {
-        guard isMock, translationMicrophoneSetup == .explainPermission, !session.isBusy else { return }
+        guard translationMicrophoneSetup == .explainPermission, !session.isBusy else { return }
+        guard recordingAllowed() else { requestTranslationHomeRecording(); return }
         if recorder.translationMicrophonePermission == .denied {
             translationMicrophoneSetup = .settingsRequired
             return
@@ -176,7 +181,7 @@ final class CaptureViewModel: ObservableObject {
                 #if PHRABIT_OFFLINE_STARTUP_TIMING
                 if self.session.operationID == identifier { self.startupTiming = timing }
                 #endif
-                #if PHRABIT_OFFLINE_TRANSLATION_HOME
+                #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
                 if self.session.operationID == identifier, self.recorder.translationMicrophonePermission == .denied {
                     self.translationMicrophoneSetup = .settingsRequired
                 }
@@ -218,6 +223,7 @@ final class CaptureViewModel: ObservableObject {
                 let text = try await self.processor.transcribe(audio: audio, durationMilliseconds: duration, sessionID: identifier)
                 try Task.checkCancellation()
                 guard self.session.operationID == identifier else { return }
+                guard self.recordingAllowed() else { throw CaptureClientError.unavailable }
                 guard !text.isEmpty, text.utf16.count <= 500 else { throw CaptureClientError.invalidInput }
                 self.recognizedText = text
                 guard self.session.recognitionCompleted(for: identifier) else { return }
@@ -227,6 +233,7 @@ final class CaptureViewModel: ObservableObject {
                 self.session.complete(result, for: identifier)
             } catch is CancellationError {
             } catch {
+                guard !Task.isCancelled, self.session.operationID == identifier else { return }
                 if let clientError = error as? CaptureClientError, case .authenticationRequired = clientError { self.authenticationRequired(); self.accessSetupRequested = true }
                 self.session.fail((error as? CaptureClientError)?.localizedDescription ?? "処理を完了できませんでした。", for: identifier)
             }
@@ -234,7 +241,7 @@ final class CaptureViewModel: ObservableObject {
     }
 
     func cancel() {
-        #if PHRABIT_OFFLINE_TRANSLATION_HOME
+        #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
         translationMicrophoneSetup = nil
         #endif
         let cancelledIdentifier = session.isBusy && uploadMayHaveStarted ? session.operationID : nil

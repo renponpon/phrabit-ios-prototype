@@ -16,6 +16,14 @@ final class CapturePreviewAuthLaunch: ObservableObject {
 
     init(bundle: Bundle = .main) {
         let diagnosticsOnly = bundle.object(forInfoDictionaryKey: "PhrabitDiagnosticsOnly") as? Bool == true
+        #if PHRABIT_PREVIEW_TRANSLATION_HOME
+        guard !diagnosticsOnly,
+              let pilotSettings = bundle.object(forInfoDictionaryKey: "PhrabitPreviewAuthOnly") as? [String: String],
+              Self.supportsLiveAudio(pilotSettings) else {
+            mode = .invalid
+            return
+        }
+        #endif
         #if PHRABIT_OFFLINE_STARTUP_TIMING && PHRABIT_OFFLINE_TRANSLATION_HOME
         mode = .invalid
         #elseif PHRABIT_OFFLINE_STARTUP_TIMING || PHRABIT_OFFLINE_TRANSLATION_HOME
@@ -59,7 +67,12 @@ final class CapturePreviewAuthLaunch: ObservableObject {
             mode = .invalid
             return
         }
-        let storage = CaptureEnvironmentStorage(base: CaptureCredentialStore(), namespace: liveAudio ? "preview-audio-pilot-v1" : "preview-auth-only-v1")
+        #if PHRABIT_PREVIEW_TRANSLATION_HOME
+        let storageNamespace = "preview-translation-home-v1"
+        #else
+        let storageNamespace = liveAudio ? "preview-audio-pilot-v1" : "preview-auth-only-v1"
+        #endif
+        let storage = CaptureEnvironmentStorage(base: CaptureCredentialStore(), namespace: storageNamespace)
         let browser = CaptureBrowserLogin()
         let backend = CaptureSupabaseAuthentication(configuration: configuration, storage: storage, openBrowser: { try await browser.open($0) })
         let access = CaptureAccessController(backend: backend, storage: storage, environmentID: configuration.environmentID,

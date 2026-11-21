@@ -192,7 +192,7 @@ const checks = [
     const access = read("Core/Sources/PhrabitCaptureCore/CaptureAccess.swift");
     const preview = read("App/CapturePreviewAuthView.swift");
     assert.match(workflow, /compile_audio_pilot:[\s\S]*?default: false/);
-    assert.match(workflow, /if: \$\{\{ inputs\.compile_audio_pilot \}\}[\s\S]*?targets:\s+PhrabitCapture:\s+settings:\s+configs:\s+Debug:\s+SWIFT_ACTIVE_COMPILATION_CONDITIONS: '\$\(inherited\) PHRABIT_LOCAL_LIVE_AUDIO'[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?extract PhrabitPreviewAuthOnly/);
+    assert.match(workflow, /if: \$\{\{ inputs\.compile_audio_pilot \}\}[\s\S]*?targets:\s+PhrabitCapture:\s+settings:\s+configs:\s+Debug:\s+SWIFT_ACTIVE_COMPILATION_CONDITIONS: '\$\(inherited\) PHRABIT_LOCAL_LIVE_AUDIO PHRABIT_PREVIEW_TRANSLATION_HOME'[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?extract PhrabitPreviewAuthOnly/);
     assert.doesNotMatch(workflow, /SWIFT_ACTIVE_COMPILATION_CONDITIONS=/);
     assert.doesNotMatch(workflow, /\bsecrets\./);
     assert.match(preview, /try await verifier\.verifyAudioPilot\(\)\s+try access\.confirmLocalRecording\(afterCheckFor: revision, until: deadline\)/);
@@ -271,11 +271,11 @@ const checks = [
     assert.match(app, /if scenePhase == \.active \{\s+model\.handlePendingLaunch\(\)/);
     assert.match(app, /case \.background:\s+model\.stopForBackground\(\)/);
     const model = read("App/CaptureViewModel.swift");
-    assert.match(model, /guard isMock, translationMicrophoneSetup == \.explainPermission, !session\.isBusy/);
+    assert.match(model, /guard translationMicrophoneSetup == \.explainPermission, !session\.isBusy[\s\S]*?guard recordingAllowed\(\) else/);
     const settingsReturn = model.split("func refreshTranslationMicrophoneSetup()")[1]?.split("func submitTranslationDraft")[0];
     assert.ok(settingsReturn);
     assert.doesNotMatch(settingsReturn, /beginRecording|requestTranslationHomeRecording/);
-    const timeout = model.match(/onTimeLimit = \{[\s\S]*?#if PHRABIT_OFFLINE_TRANSLATION_HOME([\s\S]*?)#else/)?.[1];
+    const timeout = model.match(/onTimeLimit = \{[\s\S]*?#if PHRABIT_OFFLINE_TRANSLATION_HOME \|\| PHRABIT_PREVIEW_TRANSLATION_HOME([\s\S]*?)#else/)?.[1];
     assert.ok(timeout);
     assert.match(timeout, /recordingFailed/);
     assert.doesNotMatch(timeout, /stopAndTranslate/);
@@ -283,6 +283,34 @@ const checks = [
     assert.match(view, /Button\(action: model\.stopAndTranslate\)/);
     assert.match(view, /Button\("キャンセル", action: model\.cancel\)/);
     assert.doesNotMatch(view, /https?:|URLSession|CaptureHTTPProcessor/);
+  }],
+  ["preview translation home keeps the pilot gate and only sends on explicit Stop", () => {
+    const flag = /PHRABIT_PREVIEW_TRANSLATION_HOME/;
+    assert.doesNotMatch(read("project.yml"), flag);
+    assert.doesNotMatch(readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8"), flag);
+    assert.doesNotMatch(readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8"), flag);
+    const workflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
+    assert.match(workflow, /compile_audio_pilot:\s+description:[^\r\n]+\s+type: boolean\s+required: false\s+default: false/);
+    assert.match(workflow, /if: \$\{\{ inputs\.compile_audio_pilot \}\}[\s\S]*?PHRABIT_LOCAL_LIVE_AUDIO PHRABIT_PREVIEW_TRANSLATION_HOME[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?plutil -extract PhrabitPreviewAuthOnly/);
+    const launch = read("App/CapturePreviewAuthView.swift");
+    assert.match(launch, /#if PHRABIT_PREVIEW_TRANSLATION_HOME\s+guard !diagnosticsOnly,[\s\S]*?Self\.supportsLiveAudio\(pilotSettings\) else \{\s+mode = \.invalid/);
+    assert.match(launch, /#if PHRABIT_PREVIEW_TRANSLATION_HOME\s+let storageNamespace = "preview-translation-home-v1"/);
+    assert.match(launch, /requiresPilotDeadline: liveAudio[\s\S]*?verifyAudioPilot\(\)[\s\S]*?CaptureHTTPProcessor\(previewAudio: configuration, consentGranted: \{ access\.canRecordLocally \},\s+accessToken: \{ try await access\.validAccessToken\(\) \}/);
+    const app = read("App/PhrabitCaptureApp.swift");
+    assert.match(app, /case \.liveAudio\([^\n]+\):\s+#if PHRABIT_PREVIEW_TRANSLATION_HOME\s+captureLifecycle\(TranslationHomeView\(model: model, access: access, diagnostics: diagnostics\)/);
+    const model = read("App/CaptureViewModel.swift");
+    const entry = model.split("func requestTranslationHomeRecording()")[1]?.split("func allowMicrophoneAndRecord()")[0];
+    assert.match(entry, /recordingAllowed: recordingAllowed\(\)[\s\S]*?case \.setupRequired:[\s\S]*?accessSetupRequested = true/);
+    const stop = model.split("func stopAndTranslate()")[1]?.split("func cancel()")[0];
+    assert.match(stop, /guard recordingAllowed\(\)[\s\S]*?beginRecognition\(\)[\s\S]*?recorder\.stop\(\)[\s\S]*?removeItem\(at: recordingURL\)[\s\S]*?transcribe\(audio:[\s\S]*?guard self\.recordingAllowed\(\)[\s\S]*?translate\(text: text, to: targetLanguage, sessionID: identifier\)/);
+    assert.equal((model.match(/\.transcribe\(audio:/g) ?? []).length, 1);
+    assert.match(model, /func submitTranslationDraft\(_ draft: String\) \{\s+guard isMock,/);
+    assert.match(model, /func retryTranslation\(\) \{\s+guard isMock,/);
+    const view = read("App/TranslationHomeView.swift");
+    assert.match(view, /if model\.isMock \{\s+Button \{\s+editingDraft = false\s+model\.submitTranslationDraft\(draft\)/);
+    assert.match(view, /Text\(translation\.sourceText\)[\s\S]*?Text\(translation\.targetText\)[\s\S]*?if let reading = translation\.reading/);
+    assert.match(view, /CaptureAccessView\(access: access, diagnostics: diagnostics, audioPilot: true\)/);
+    assert.doesNotMatch(view, /\.onDismiss|beginRecording|transcribe\(audio:/);
   }],
   ["offline prototype privacy declarations match the native APIs", () => {
     const applicationPrivacy = read("App/PrivacyInfo.xcprivacy");

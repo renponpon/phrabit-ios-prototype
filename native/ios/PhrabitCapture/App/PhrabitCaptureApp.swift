@@ -12,7 +12,7 @@ struct PhrabitCaptureApp: App {
             switch preview.mode {
             case .offline(let model, let access):
                 #if PHRABIT_OFFLINE_TRANSLATION_HOME
-                captureLifecycle(TranslationHomeView(model: model), model: model)
+                captureLifecycle(TranslationHomeView(model: model, access: access), model: model)
                 #else
                 recordingView(model: model, access: access)
                 #endif
@@ -25,7 +25,11 @@ struct PhrabitCaptureApp: App {
             case .localRecording(let model, let access, let diagnostics):
                 recordingView(model: model, access: access, diagnostics: diagnostics, localPreview: true)
             case .liveAudio(let model, let access, let diagnostics):
+                #if PHRABIT_PREVIEW_TRANSLATION_HOME
+                captureLifecycle(TranslationHomeView(model: model, access: access, diagnostics: diagnostics), model: model)
+                #else
                 recordingView(model: model, access: access, diagnostics: diagnostics, audioPilot: true)
+                #endif
             }
         }
     }
@@ -50,7 +54,7 @@ struct PhrabitCaptureApp: App {
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:
-                    #if PHRABIT_OFFLINE_TRANSLATION_HOME
+                    #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
                     model.refreshTranslationMicrophoneSetup()
                     #endif
                     model.handlePendingLaunch()

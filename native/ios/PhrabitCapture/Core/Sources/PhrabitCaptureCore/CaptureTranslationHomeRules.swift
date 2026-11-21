@@ -10,12 +10,14 @@ public enum CaptureTranslationHomeRules {
     }
 
     public enum MicrophoneEntry: Equatable {
+        case setupRequired
         case startRecording
         case explainPermission
         case settingsRequired
     }
 
-    public static func microphoneEntry(for permission: MicrophonePermission) -> MicrophoneEntry {
+    public static func microphoneEntry(for permission: MicrophonePermission, recordingAllowed: Bool = true) -> MicrophoneEntry {
+        guard recordingAllowed else { return .setupRequired }
         switch permission {
         case .allowed: return .startRecording
         case .notRequested: return .explainPermission
