@@ -10,6 +10,8 @@ import { approvedPreviewProjectDigest, assertTestFlightUploadAllowed, audioPilot
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
 const controlUuid = '22222222-2222-2222-2222-222222222222';
+const archivePilot = { IOS_AUDIO_PILOT_ACTION: 'archive', IOS_AUDIO_PILOT_VARIANT: 'translation-home' };
+const readyPilotUpload = { IOS_AUDIO_PILOT_ACTION: 'internal-upload', IOS_AUDIO_PILOT_VARIANT: 'translation-home', IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: 'true' };
 
 test('requires the exact approved main commit in the dedicated repository', () => { validateExecution(approved); });
 test('rejects another repository or branch', () => {
@@ -149,9 +151,9 @@ test('auth-only manifest declares linked account fields, not tracking or audio',
 });
 
 test('audio pilot archive is opt-in, requires isolated Preview auth and excludes older modes', () => {
-  const flag = { IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'true' };
+  const flag = archivePilot;
   assert.throws(() => previewAuthSettings(flag), /requires Preview auth-only mode/);
-  assert.throws(() => previewAuthSettings({ IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'yes' }), /Invalid audio pilot mode/);
+  assert.throws(() => previewAuthSettings({ IOS_AUDIO_PILOT_ACTION: 'yes' }), /Invalid audio pilot action/);
   for (const other of ['IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
     assert.throws(() => previewAuthSettings({ ...flag, IOS_PREVIEW_AUTH_ONLY: 'true', [other]: 'true' }), /excludes other capture modes/);
   }
@@ -160,7 +162,7 @@ test('audio pilot archive is opt-in, requires isolated Preview auth and excludes
 
 test('signed audio pilot uses an app-target Release flag and describes when voice is shared', () => {
   const settings = { ProjectRef: 'abcdefghijklmnopqrst', PublishableKey: 'sb_publishable_synthetic_example_key', ConnectionCheck: 'capture-audio-pilot-v1' };
-  const template = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', settings);
+  const template = distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', settings, 'none', 'legacy');
   const app = template.targets.PhrabitCapture;
   const control = template.targets.PhrabitCaptureControl;
   assert.deepEqual(app.info.properties.PhrabitPreviewAuthOnly, settings);
@@ -169,8 +171,26 @@ test('signed audio pilot uses an app-target Release flag and describes when voic
   assert.equal(template.settings.configs, undefined);
   assert.equal(control.settings.configs, undefined);
   assert.equal(control.info.properties.PhrabitPreviewAuthOnly, undefined);
+  assert.equal(app.info.properties.PhrabitPreviewTranslationHome, undefined);
   assert.equal(app.info.properties.ITSAppUsesNonExemptEncryption, undefined);
-  assert.throws(() => distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', { ...settings, LocalMockRecording: 'true' }), /excludes local mock/);
+  assert.throws(() => distributionSpec('TESTTEAM01', appUuid, controlUuid, '1.1', { ...settings, LocalMockRecording: 'true' }, 'none', 'legacy'), /excludes local mock/);
+});
+
+test('signed translation home pilot adds flags and marker only to the app and rejects other build types', () => {
+  const settings = { ProjectRef: 'abcdefghijklmnopqrst', PublishableKey: 'sb_publishable_synthetic_example_key', ConnectionCheck: 'capture-audio-pilot-v1' };
+  const template = distributionSpec('TESTTEAM01', appUuid, controlUuid, '16.1', settings, 'none', 'translation-home');
+  const { PhrabitCapture: app, PhrabitCaptureControl: control } = template.targets;
+  assert.equal(app.settings.configs.Release.SWIFT_ACTIVE_COMPILATION_CONDITIONS, '$(inherited) PHRABIT_LOCAL_LIVE_AUDIO PHRABIT_PREVIEW_TRANSLATION_HOME');
+  assert.deepEqual(app.info.properties.PhrabitPreviewAuthOnly, settings);
+  assert.equal(app.info.properties.PhrabitPreviewTranslationHome, true);
+  assert.equal(app.info.properties.PhrabitOfflineTranslationHome, undefined);
+  assert.equal(control.settings.configs, undefined);
+  assert.equal(control.info.properties.PhrabitPreviewTranslationHome, undefined);
+  assert.equal(control.info.properties.PhrabitPreviewAuthOnly, undefined);
+  assert.equal(app.info.properties.ITSAppUsesNonExemptEncryption, undefined);
+  assert.throws(() => distributionSpec('TESTTEAM01', appUuid, controlUuid, '16.1', settings), /exactly one audio pilot variant/);
+  assert.throws(() => distributionSpec('TESTTEAM01', appUuid, controlUuid, '16.1', undefined, 'none', 'translation-home'), /exactly one audio pilot variant/);
+  assert.throws(() => distributionSpec('TESTTEAM01', appUuid, controlUuid, '16.1', settings, 'translation-home', 'translation-home'), /cannot embed a Preview configuration/);
 });
 
 test('audio pilot draft includes retained text and usage metadata for functionality, without tracking', () => {
@@ -185,13 +205,13 @@ test('audio pilot draft includes retained text and usage metadata for functional
 
 test('the runner skips Apple upload and script denies it before reading credentials', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only && !inputs\.preview_audio_pilot_upload_internal && inputs\.offline_internal_variant == 'none' \}\}/);
-  assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.preview_audio_pilot_upload_internal && !inputs\.preview_audio_pilot_archive_only && inputs\.confirm_audio_pilot_no_auto_distribution && inputs\.offline_internal_variant == 'none' \}\}/);
+  assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ inputs\.audio_pilot_action == 'none' && inputs\.audio_pilot_variant == 'none' && inputs\.offline_internal_variant == 'none' \}\}/);
+  assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.audio_pilot_action == 'internal-upload' && inputs\.confirm_audio_pilot_no_auto_distribution && inputs\.offline_internal_variant == 'none' \}\}/);
   assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
   for (const unapproved of ['archive', 'internal-upload', undefined, false]) {
-    assert.throws(() => assertTestFlightUploadAllowed({ audioPilotMode: unapproved }, false), /Ordinary upload cannot submit/);
+    assert.throws(() => assertTestFlightUploadAllowed({ audioPilotMode: unapproved, audioPilotVariant: 'none' }, 'none'), /Ordinary upload cannot submit/);
   }
-  assert.doesNotThrow(() => assertTestFlightUploadAllowed({ audioPilotMode: null }, false));
+  assert.doesNotThrow(() => assertTestFlightUploadAllowed({ audioPilotMode: null, audioPilotVariant: 'none' }, 'none'));
 });
 
 test('direct upload command rejects a pilot even without access to its package or Apple credentials', () => {
@@ -200,14 +220,18 @@ test('direct upload command rejects a pilot even without access to its package o
   const statePath = path.join(privateDirectory, 'state.json');
   try {
     mkdirSync(privateDirectory);
-    writeFileSync(statePath, JSON.stringify({ audioPilotMode: 'archive' }));
     const script = fileURLToPath(new URL('./ios-testflight.mjs', import.meta.url));
-    for (const [stage, message] of [
-      ['upload', /Ordinary upload cannot submit/],
-      ['upload-audio-pilot', /Explicit internal audio pilot upload mode required/]
+    const inspected = { audioPilotMode: 'internal-upload', audioPilotVariant: 'translation-home', previewAuthOnly: true, audioPilotInspectionPassed: 'translation-home' };
+    for (const [stage, env, state, message] of [
+      ['upload', {}, inspected, /Ordinary upload cannot submit/],
+      ['upload-audio-pilot', readyPilotUpload, { ...inspected, audioPilotMode: 'archive' }, /Explicit internal audio pilot upload mode required/],
+      ['upload-audio-pilot', { ...readyPilotUpload, IOS_AUDIO_PILOT_VARIANT: 'legacy' }, inspected, /exact variant selected for signing/],
+      ['upload-audio-pilot', archivePilot, inspected, /Explicit internal audio pilot upload action required/],
+      ['upload-audio-pilot', { ...readyPilotUpload, IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: 'false' }, inspected, /automatic distribution check/]
     ]) {
+      writeFileSync(statePath, JSON.stringify(state));
       const result = spawnSync(process.execPath, [script, stage], {
-        env: { ...approved, RUNNER_TEMP: runner }, encoding: 'utf8', timeout: 5_000,
+        env: { ...approved, ...env, RUNNER_TEMP: runner }, encoding: 'utf8', timeout: 5_000,
       });
       assert.equal(result.status, 1);
       assert.match(result.stderr, message);
@@ -230,8 +254,8 @@ test('offline variants are opt-in and reject online modes and settings', () => {
     for (const conflict of ['IOS_PREVIEW_AUTH_ONLY', 'IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
       assert.throws(() => offlineInternalVariant({ ...selected, [conflict]: 'true' }), /exclude Preview modes/);
     }
-    assert.throws(() => offlineInternalVariant({ ...selected, IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'true' }), /exclude an audio pilot/);
-    assert.throws(() => offlineInternalVariant({ ...selected, IOS_PREVIEW_AUDIO_PILOT_UPLOAD_INTERNAL: 'true', IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: 'true' }), /exclude an audio pilot/);
+    assert.throws(() => offlineInternalVariant({ ...selected, ...archivePilot }), /exclude an audio pilot/);
+    assert.throws(() => offlineInternalVariant({ ...selected, ...readyPilotUpload }), /exclude an audio pilot/);
     for (const setting of ['IOS_PREVIEW_PROJECT_REF', 'IOS_PREVIEW_PUBLISHABLE_KEY']) {
       assert.throws(() => offlineInternalVariant({ ...selected, [setting]: 'synthetic' }), /must not receive Preview settings/);
     }
@@ -263,14 +287,14 @@ test('each offline variant signs both targets without the other variant or a com
 
 test('offline submissions require the inspected exact variant and are isolated from normal and pilot upload', () => {
   for (const [variant, otherVariant] of [['startup-timing', 'translation-home'], ['translation-home', 'startup-timing']]) {
-    const valid = { audioPilotMode: null, offlineInternalVariant: variant, previewAuthOnly: false, offlineInspectionPassed: true };
-    assert.doesNotThrow(() => assertTestFlightUploadAllowed(valid, false, variant));
-    assert.throws(() => assertTestFlightUploadAllowed(valid, false), /separate internal upload stage/);
-    assert.throws(() => assertTestFlightUploadAllowed(valid, true), /separate internal upload stage/);
-    assert.throws(() => assertTestFlightUploadAllowed(valid, true, variant), /modes are exclusive/);
-    assert.throws(() => assertTestFlightUploadAllowed(valid, false, otherVariant), /exact variant match/);
+    const valid = { audioPilotMode: null, audioPilotVariant: 'none', offlineInternalVariant: variant, previewAuthOnly: false, offlineInspectionPassed: true };
+    assert.doesNotThrow(() => assertTestFlightUploadAllowed(valid, 'none', variant));
+    assert.throws(() => assertTestFlightUploadAllowed(valid, 'none'), /separate internal upload stage/);
+    assert.throws(() => assertTestFlightUploadAllowed(valid, 'legacy'), /separate internal upload stage/);
+    assert.throws(() => assertTestFlightUploadAllowed(valid, 'translation-home', variant), /modes are exclusive/);
+    assert.throws(() => assertTestFlightUploadAllowed(valid, 'none', otherVariant), /exact variant match/);
     for (const override of [{ offlineInspectionPassed: false }, { offlineInternalVariant: 'none' }, { previewAuthOnly: true }, { audioPilotMode: 'internal-upload' }]) {
-      assert.throws(() => assertTestFlightUploadAllowed({ ...valid, ...override }, false, variant), /completed offline binary check/);
+      assert.throws(() => assertTestFlightUploadAllowed({ ...valid, ...override }, 'none', variant), /completed offline binary check/);
     }
   }
   const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
@@ -288,7 +312,7 @@ test('direct offline upload rejects an omitted or mismatched variant before read
   try {
     mkdirSync(privateDirectory);
     writeFileSync(statePath, JSON.stringify({
-      audioPilotMode: null, offlineInternalVariant: 'translation-home', previewAuthOnly: false, offlineInspectionPassed: true,
+      audioPilotMode: null, audioPilotVariant: 'none', offlineInternalVariant: 'translation-home', previewAuthOnly: false, offlineInspectionPassed: true,
     }));
     const script = fileURLToPath(new URL('./ios-testflight.mjs', import.meta.url));
     for (const [settings, message] of [
@@ -309,24 +333,28 @@ test('direct offline upload rejects an omitted or mismatched variant before read
 });
 
 test('pilot upload is distinct from archive-only and requires an independent group check', () => {
-  const archive = { IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: 'true' };
-  const upload = { IOS_PREVIEW_AUDIO_PILOT_UPLOAD_INTERNAL: 'true' };
   const groupCheck = { IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: 'true' };
   assert.equal(audioPilotMode({}), null);
-  assert.equal(audioPilotMode(archive), 'archive');
-  assert.equal(audioPilotMode({ ...upload, ...groupCheck }), 'internal-upload');
-  assert.throws(() => audioPilotMode(upload), /automatic distribution check/);
+  assert.equal(audioPilotMode(archivePilot), 'archive');
+  assert.equal(audioPilotMode(readyPilotUpload), 'internal-upload');
+  assert.throws(() => audioPilotMode({ ...readyPilotUpload, IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: 'false' }), /automatic distribution check/);
   assert.throws(() => audioPilotMode(groupCheck), /automatic distribution check/);
-  assert.throws(() => audioPilotMode({ ...archive, ...upload, ...groupCheck }), /mutually exclusive/);
-  assert.throws(() => previewAuthSettings({ ...upload, ...groupCheck }), /requires Preview auth-only mode/);
+  assert.throws(() => audioPilotMode({ ...archivePilot, ...groupCheck }), /automatic distribution check/);
+  assert.throws(() => audioPilotMode({ IOS_AUDIO_PILOT_ACTION: 'archive' }), /exactly one audio pilot variant/);
+  assert.throws(() => audioPilotMode({ IOS_AUDIO_PILOT_VARIANT: 'translation-home' }), /exactly one audio pilot variant/);
+  assert.throws(() => audioPilotMode({ ...archivePilot, IOS_AUDIO_PILOT_VARIANT: 'legacy,translation-home' }), /exactly one audio pilot variant/);
+  assert.throws(() => previewAuthSettings(readyPilotUpload), /requires Preview auth-only mode/);
 });
 
 test('pilot submission requires a completed binary check on the exact pilot build mode', () => {
-  const validated = { audioPilotMode: 'internal-upload', previewAuthOnly: true, audioPilotInspectionPassed: true };
-  assert.doesNotThrow(() => assertTestFlightUploadAllowed(validated, true));
-  assert.throws(() => assertTestFlightUploadAllowed({ ...validated, audioPilotMode: 'archive' }, true), /Explicit internal/);
-  assert.throws(() => assertTestFlightUploadAllowed({ ...validated, audioPilotInspectionPassed: false }, true), /completed binary check/);
-  assert.throws(() => assertTestFlightUploadAllowed({ ...validated, previewAuthOnly: false }, true), /isolated Preview/);
+  for (const [variant, other] of [['legacy', 'translation-home'], ['translation-home', 'legacy']]) {
+    const validated = { audioPilotMode: 'internal-upload', audioPilotVariant: variant, previewAuthOnly: true, audioPilotInspectionPassed: variant };
+    assert.doesNotThrow(() => assertTestFlightUploadAllowed(validated, variant));
+    assert.throws(() => assertTestFlightUploadAllowed(validated, other), /exact variant selected for signing/);
+    assert.throws(() => assertTestFlightUploadAllowed({ ...validated, audioPilotMode: 'archive' }, variant), /Explicit internal/);
+    assert.throws(() => assertTestFlightUploadAllowed({ ...validated, audioPilotInspectionPassed: other }, variant), /completed binary check/);
+    assert.throws(() => assertTestFlightUploadAllowed({ ...validated, previewAuthOnly: false }, variant), /isolated Preview/);
+  }
 });
 
 test('binary inspection accepts Apple platform links and identifies encryption evidence without asserting exemption', () => {

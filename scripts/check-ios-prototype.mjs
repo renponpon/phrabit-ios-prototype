@@ -162,12 +162,12 @@ const checks = [
     for (const settings of [workflow, read("project.yml")]) {
       assert.doesNotMatch(settings, /PHRABIT_LOCAL_LIVE_AUDIO|capture-audio-(preview|pilot)-v1/);
     }
-    assert.match(workflow, /preview_audio_pilot_archive_only:[\s\S]*?default: false/);
-    assert.match(workflow, /preview_audio_pilot_upload_internal:[\s\S]*?default: false/);
-    assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ !inputs\.preview_audio_pilot_archive_only && !inputs\.preview_audio_pilot_upload_internal && inputs\.offline_internal_variant == 'none' \}\}/);
-    assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.preview_audio_pilot_upload_internal && !inputs\.preview_audio_pilot_archive_only && inputs\.confirm_audio_pilot_no_auto_distribution && inputs\.offline_internal_variant == 'none' \}\}/);
+    assert.match(workflow, /audio_pilot_action:\s+description:[^\r\n]+\s+type: choice\s+required: false\s+default: 'none'\s+options:\s+- 'none'\s+- archive\s+- internal-upload/);
+    assert.match(workflow, /audio_pilot_variant:\s+description:[^\r\n]+\s+type: choice\s+required: false\s+default: 'none'\s+options:\s+- 'none'\s+- legacy\s+- translation-home/);
+    assert.match(workflow, /name: Upload to App Store Connect for internal testing\s+if: \$\{\{ inputs\.audio_pilot_action == 'none' && inputs\.audio_pilot_variant == 'none' && inputs\.offline_internal_variant == 'none' \}\}/);
+    assert.match(workflow, /name: Submit audio pilot build to Apple for internal testing only\s+if: \$\{\{ inputs\.audio_pilot_action == 'internal-upload' && inputs\.confirm_audio_pilot_no_auto_distribution && inputs\.offline_internal_variant == 'none' \}\}\s+env:\s+IOS_AUDIO_PILOT_ACTION:[^\r\n]+\s+IOS_AUDIO_PILOT_VARIANT:[^\r\n]+\s+IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION:/);
     assert.match(distribution, /if \(pilotMode \|\| offline\) options\.destination = 'export'/);
-    assert.match(distribution, /stage === 'upload' \|\| stage === 'upload-audio-pilot' \|\| stage === 'upload-offline'\) \{\s+const state = readState\(\);[\s\S]*?assertTestFlightUploadAllowed\(state, stage === 'upload-audio-pilot', requestedOfflineVariant\);/);
+    assert.match(distribution, /stage === 'upload' \|\| stage === 'upload-audio-pilot' \|\| stage === 'upload-offline'\) \{\s+const state = readState\(\);[\s\S]*?assertTestFlightUploadAllowed\(state, requestedPilotVariant, requestedOfflineVariant\);[\s\S]*?requireSecret\('ASC_KEY_ID'\)/);
   }],
   ["new-path diagnostics only visits the authenticated GET and cannot queue a recording", () => {
     const app = read("App/PhrabitCaptureApp.swift");
@@ -288,7 +288,11 @@ const checks = [
     const flag = /PHRABIT_PREVIEW_TRANSLATION_HOME/;
     assert.doesNotMatch(read("project.yml"), flag);
     assert.doesNotMatch(readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8"), flag);
-    assert.doesNotMatch(readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8"), flag);
+    const distribution = readFileSync(path.join(root, "scripts/ios-testflight.mjs"), "utf8");
+    assert.match(distribution, flag);
+    assert.match(distribution, /conditions\.includes\(translationHomePilotFlag\), translationHomePilot && target === 'PhrabitCapture'/);
+    assert.match(distribution, /info\[translationHomePilotMarker\], translationHomePilot && identifier === 'com\.phrabit\.app'/);
+    assert.match(distribution, /state\.audioPilotInspectionPassed === requestedPilotVariant/);
     const workflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
     assert.match(workflow, /compile_audio_pilot:\s+description:[^\r\n]+\s+type: boolean\s+required: false\s+default: false/);
     assert.match(workflow, /if: \$\{\{ inputs\.compile_audio_pilot \}\}[\s\S]*?PHRABIT_LOCAL_LIVE_AUDIO PHRABIT_PREVIEW_TRANSLATION_HOME[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?plutil -extract PhrabitPreviewAuthOnly/);

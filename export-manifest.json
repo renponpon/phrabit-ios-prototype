@@ -209,13 +209,13 @@
     },
     {
       "path": ".github/workflows/ios-testflight.yml",
-      "bytes": 6672,
-      "sha256": "0e1ec174f55a1d6a6eb654263da213371025f391128ea6dcf114f45d40a4ed12"
+      "bytes": 6951,
+      "sha256": "1577588a87b7bdf07b64f522553aaad82a00937d201546fa96e09e3f712a6ef2"
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 25790,
-      "sha256": "3e1f3ba3343429589fd4389c7bf4af97e2dcb2ac882902b33012eb70323009d1"
+      "bytes": 26457,
+      "sha256": "680214435afa803012240ce6044b337dca7b7903cc591fe17a2dd9755c7a51e6"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
@@ -234,13 +234,13 @@
     },
     {
       "path": "scripts/ios-testflight.mjs",
-      "bytes": 35420,
-      "sha256": "4a659d5fd1fda1427c476c719a6cf7f3962f703ad4c12575aaa559de2b49d379"
+      "bytes": 37406,
+      "sha256": "36c10bcf05647fcd02d9b784dbaa0055f4521a8669a882a6d424f53adbebcd2a"
     },
     {
       "path": "scripts/ios-testflight.test.mjs",
-      "bytes": 25583,
-      "sha256": "bb26f9d85d16d43346b6aa8d14fd04a8e50e0957c253b86d5a32265c341aa252"
+      "bytes": 28712,
+      "sha256": "27103576605f937d5f90e6533bf1119466e7e8e63ed9bc76df46b2e38ee80c87"
     },
     {
       "path": "public/icons/icon-512.png",

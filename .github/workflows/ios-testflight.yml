@@ -32,16 +32,24 @@ on:
         type: boolean
         required: true
         default: false
-      preview_audio_pilot_archive_only:
-        description: 音声候補の署名と書き出しだけ（preview_auth_only必須、Appleアップロードなし）
-        type: boolean
+      audio_pilot_action:
+        description: 音声候補の署名のみ、またはAppleへの内部限定提出（preview_auth_only必須）
+        type: choice
         required: false
-        default: false
-      preview_audio_pilot_upload_internal:
-        description: 本人用の実音声版をAppleに提出（別承認・内部限定、配布追加なし）
-        type: boolean
+        default: 'none'
+        options:
+          - 'none'
+          - archive
+          - internal-upload
+      audio_pilot_variant:
+        description: 音声候補の画面（アクションがnone以外の場合に選択。検証枠はここでは開かない）
+        type: choice
         required: false
-        default: false
+        default: 'none'
+        options:
+          - 'none'
+          - legacy
+          - translation-home
       confirm_audio_pilot_no_auto_distribution:
         description: 本人用実音声の提出前に、内部グループの自動配布なしを確認済み
         type: boolean
@@ -98,8 +106,8 @@ jobs:
           IOS_PREVIEW_CAPTURE_CHECK: ${{ inputs.preview_capture_check }}
           IOS_PREVIEW_MOCK_RECORDING: ${{ inputs.preview_mock_recording }}
           IOS_PREVIEW_AUDIO_ACCESS_ONLY: ${{ inputs.preview_audio_access_only }}
-          IOS_PREVIEW_AUDIO_PILOT_ARCHIVE_ONLY: ${{ inputs.preview_audio_pilot_archive_only }}
-          IOS_PREVIEW_AUDIO_PILOT_UPLOAD_INTERNAL: ${{ inputs.preview_audio_pilot_upload_internal }}
+          IOS_AUDIO_PILOT_ACTION: ${{ inputs.audio_pilot_action }}
+          IOS_AUDIO_PILOT_VARIANT: ${{ inputs.audio_pilot_variant }}
           IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: ${{ inputs.confirm_audio_pilot_no_auto_distribution }}
           IOS_OFFLINE_INTERNAL_VARIANT: ${{ inputs.offline_internal_variant }}
           IOS_PREVIEW_PROJECT_REF: ${{ inputs.offline_internal_variant == 'none' && secrets.IOS_PREVIEW_PROJECT_REF || '' }}
@@ -113,15 +121,18 @@ jobs:
       - name: Build and verify signed iPhone archive
         run: node scripts/ios-testflight.mjs build
       - name: Upload to App Store Connect for internal testing
-        if: ${{ !inputs.preview_audio_pilot_archive_only && !inputs.preview_audio_pilot_upload_internal && inputs.offline_internal_variant == 'none' }}
+        if: ${{ inputs.audio_pilot_action == 'none' && inputs.audio_pilot_variant == 'none' && inputs.offline_internal_variant == 'none' }}
         env:
           ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: node scripts/ios-testflight.mjs upload
       - name: Submit audio pilot build to Apple for internal testing only
-        if: ${{ inputs.preview_audio_pilot_upload_internal && !inputs.preview_audio_pilot_archive_only && inputs.confirm_audio_pilot_no_auto_distribution && inputs.offline_internal_variant == 'none' }}
+        if: ${{ inputs.audio_pilot_action == 'internal-upload' && inputs.confirm_audio_pilot_no_auto_distribution && inputs.offline_internal_variant == 'none' }}
         env:
+          IOS_AUDIO_PILOT_ACTION: ${{ inputs.audio_pilot_action }}
+          IOS_AUDIO_PILOT_VARIANT: ${{ inputs.audio_pilot_variant }}
+          IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: ${{ inputs.confirm_audio_pilot_no_auto_distribution }}
           ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
