@@ -12,6 +12,7 @@ const audioPilotFlag = 'PHRABIT_LOCAL_LIVE_AUDIO';
 const translationHomePilotFlag = 'PHRABIT_PREVIEW_TRANSLATION_HOME';
 const translationHomePilotMarker = 'PhrabitPreviewTranslationHome';
 const audioPilotMicrophoneDescription = '本人限定の音声翻訳テストに使います。「停止して翻訳」を押したときだけ録音をOpenAIへ、認識した文章をGoogle Geminiへ送信します。';
+const offlineGuestVariant = 'guest-home';
 const offlineBuilds = new Map([
   ['startup-timing', {
     flag: 'PHRABIT_OFFLINE_STARTUP_TIMING',
@@ -22,6 +23,11 @@ const offlineBuilds = new Map([
     flag: 'PHRABIT_OFFLINE_TRANSLATION_HOME',
     marker: 'PhrabitOfflineTranslationHome',
     microphone: '翻訳画面で録音を試します。音声は端末外へ送信せず、録音の終了後に削除します。'
+  }],
+  [offlineGuestVariant, {
+    flag: 'PHRABIT_OFFLINE_GUEST_TESTFLIGHT',
+    marker: 'PhrabitOfflineGuestTestFlight',
+    microphone: 'ログインなしの試作で録音を確認します。音声は端末外へ送信せず、録音の終了後に削除します。'
   }]
 ]);
 
@@ -56,6 +62,7 @@ function assertAudioPilotVariant(variant, active) {
 
 export function offlineInternalVariant(environment) {
   const variant = environment.IOS_OFFLINE_INTERNAL_VARIANT ?? 'none';
+  assert.equal(environment.IOS_GUEST_NO_AUTO_DISTRIBUTION ?? 'false', String(variant === offlineGuestVariant), 'Guest TestFlight requires its own automatic distribution check');
   if (!offlineBuild(variant)) return variant;
   for (const other of ['IOS_PREVIEW_AUTH_ONLY', 'IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
     assert.equal(environment[other] ?? 'false', 'false', 'Offline internal builds exclude Preview modes');
@@ -172,6 +179,7 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, prev
   if (audioPilot) assert.ok(!('LocalMockRecording' in previewSettings), 'Audio pilot excludes local mock recording');
   const diagnosticsMarker = diagnosticsOnly ? { PhrabitDiagnosticsOnly: true } : {};
   const offlineMarker = offline ? { [offline.marker]: true } : {};
+  const guestProperties = offlineVariant === offlineGuestVariant ? { 'CFBundleURLTypes:REPLACE': [] } : {};
   const offlineConditions = offline ? { configs: { Release: { SWIFT_ACTIVE_COMPILATION_CONDITIONS: `$(inherited) ${offline.flag}` } } } : {};
   return {
     include: ['project.yml'],
@@ -192,12 +200,22 @@ export function distributionSpec(teamId, appUuid, controlUuid, buildNumber, prev
             ? '端末内で録音を試します。音声は送信せず、録音後に削除します。'
             : 'この接続検証版はマイクを使用しません。'
         } } : offline ? { properties: {
-          ...info.properties, ...offlineMarker, NSMicrophoneUsageDescription: offline.microphone
+          ...info.properties, ...offlineMarker, ...guestProperties, NSMicrophoneUsageDescription: offline.microphone
         } } : info
       },
       PhrabitCaptureControl: { settings: { base: { ...signing, PROVISIONING_PROFILE_SPECIFIER: controlUuid }, ...offlineConditions },
         info: { properties: { ...info.properties, ...diagnosticsMarker, ...offlineMarker } } }
     }
+  };
+}
+
+export function guestUnsignedSpec() {
+  const base = distributionSpec('TESTTEAM01', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', '1.1', undefined, offlineGuestVariant);
+  return {
+    include: base.include,
+    targets: Object.fromEntries(Object.entries(base.targets).map(([name, target]) => [
+      name, { settings: { configs: target.settings.configs }, info: target.info }
+    ]))
   };
 }
 
@@ -420,6 +438,7 @@ function main(stage) {
           }
           assert.ok(!('PhrabitPreviewAuthOnly' in info) && !('PhrabitDiagnosticsOnly' in info), 'Offline archive must not contain Preview settings');
           if (identifier === 'com.phrabit.app') assert.equal(info.NSMicrophoneUsageDescription, offline.microphone);
+          if (state.offlineInternalVariant === offlineGuestVariant) assert.deepEqual(info.CFBundleURLTypes ?? [], [], 'Guest builds must not register a sign-in callback');
           const privacyManifest = path.join(bundlePath, 'PrivacyInfo.xcprivacy');
           const privacy = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', privacyManifest], `${identifier}-offline-privacy`));
           assert.deepEqual(privacy.NSPrivacyCollectedDataTypes, []);

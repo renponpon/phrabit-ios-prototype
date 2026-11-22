@@ -1,17 +1,30 @@
+import Foundation
 import SwiftUI
 import PhrabitCaptureCore
+
+#if PHRABIT_OFFLINE_GUEST_TESTFLIGHT && (PHRABIT_LOCAL_LIVE_AUDIO || PHRABIT_PREVIEW_TRANSLATION_HOME || PHRABIT_OFFLINE_STARTUP_TIMING || PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_OFFLINE_GUEST_HOME)
+#error("The guest TestFlight build cannot include other capture variants.")
+#endif
 
 @main
 @MainActor
 struct PhrabitCaptureApp: App {
-    #if !(DEBUG && PHRABIT_OFFLINE_GUEST_HOME)
+    #if !(PHRABIT_OFFLINE_GUEST_TESTFLIGHT || (DEBUG && PHRABIT_OFFLINE_GUEST_HOME))
     @StateObject private var preview = CapturePreviewAuthLaunch()
     @Environment(\.scenePhase) private var scenePhase
     #endif
 
     var body: some Scene {
         WindowGroup {
-            #if DEBUG && PHRABIT_OFFLINE_GUEST_HOME
+            #if PHRABIT_OFFLINE_GUEST_TESTFLIGHT
+            if Bundle.main.object(forInfoDictionaryKey: "PhrabitOfflineGuestTestFlight") as? Bool == true,
+               Bundle.main.object(forInfoDictionaryKey: "PhrabitPreviewAuthOnly") == nil {
+                GuestCaptureHomeView()
+                    .preferredColorScheme(.dark)
+            } else {
+                ContentUnavailableView("試作版の設定を確認できません", systemImage: "exclamationmark.triangle")
+            }
+            #elseif DEBUG && PHRABIT_OFFLINE_GUEST_HOME
             GuestCaptureHomeView()
                 .preferredColorScheme(.dark)
             #else
@@ -41,7 +54,7 @@ struct PhrabitCaptureApp: App {
         }
     }
 
-    #if !(DEBUG && PHRABIT_OFFLINE_GUEST_HOME)
+    #if !(PHRABIT_OFFLINE_GUEST_TESTFLIGHT || (DEBUG && PHRABIT_OFFLINE_GUEST_HOME))
     private func recordingView(model: CaptureViewModel, access: CaptureAccessController, diagnostics: CaptureConnectionDiagnostics? = nil, localPreview: Bool = false, audioPilot: Bool = false) -> some View {
         captureLifecycle(CaptureView(model: model, access: access, diagnostics: diagnostics, localPreview: localPreview, audioPilot: audioPilot), model: model)
     }

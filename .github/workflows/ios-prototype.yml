@@ -23,6 +23,11 @@ on:
         type: boolean
         required: false
         default: false
+      compile_guest_home:
+        description: 送信しないログインなしの実機候補を未署名で確認（接続設定・鍵・配布なし）
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -264,6 +269,39 @@ jobs:
             if plutil -extract PhrabitPreviewAuthOnly json -o /dev/null "$bundle/Info.plist" 2>/dev/null; then
               echo 'The offline translation home must not contain connection settings.'
               exit 1
+            fi
+          done
+      - name: Verify the offline guest Release build without signing
+        if: ${{ inputs.compile_guest_home }}
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          node --test ../../../scripts/ios-testflight.test.mjs
+          node --input-type=module -e 'import { guestUnsignedSpec } from "../../../scripts/ios-testflight.mjs"; console.log(JSON.stringify(guestUnsignedSpec()));' > guest-unsigned.json
+          xcodegen generate --spec guest-unsigned.json
+          mkdir -p PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          cp Core/Package.resolved PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          xcodebuild \
+            -project PhrabitCapture.xcodeproj \
+            -scheme PhrabitCapture \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/GuestHomeDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -onlyUsePackageVersionsFromResolvedFile \
+            build
+          app=build/GuestHomeDerivedData/Build/Products/Release-iphoneos/PhrabitCapture.app
+          control="$app/PlugIns/PhrabitCaptureControl.appex"
+          for bundle in "$app" "$control"; do
+            info="$bundle/Info.plist"
+            test "$(plutil -extract PhrabitOfflineGuestTestFlight raw -o - "$info")" = true
+            test ! -e "$bundle/embedded.mobileprovision"
+            test ! -d "$bundle/_CodeSignature"
+            for key in PhrabitPreviewAuthOnly PhrabitDiagnosticsOnly ITSAppUsesNonExemptEncryption ITSEncryptionExportComplianceCode; do
+              if plutil -extract "$key" json -o /dev/null "$info" 2>/dev/null; then exit 1; fi
+            done
+            if urls="$(plutil -extract CFBundleURLTypes json -o - "$info" 2>/dev/null)"; then
+              node -e 'require("node:assert/strict").deepEqual(JSON.parse(process.argv[1]), [])' "$urls"
             fi
           done
 

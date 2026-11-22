@@ -245,7 +245,7 @@ const checks = [
     assert.match(workflow, /Verify unsigned iPhone archive identifiers and privacy/);
     assert.match(workflow, /UISupportedInterfaceOrientations json/);
     assert.match(workflow, /All interface orientations must be supported/);
-    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 5);
+    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 6);
     assert.doesNotMatch(workflow, /^\s+(push|pull_request|schedule):/m);
     assert.doesNotMatch(workflow, /secrets\.|upload_to_testflight|app-store-connect|vercel|curl|\.env/);
     assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
@@ -317,15 +317,16 @@ const checks = [
     assert.match(view, /CaptureAccessView\(access: access, diagnostics: diagnostics, audioPilot: true\)/);
     assert.doesNotMatch(view, /\.onDismiss|beginRecording|transcribe\(audio:/);
   }],
-  ["guest home is Debug-only, offline and reuses the guarded recorder", () => {
+  ["guest home is opt-in, offline and reuses the guarded recorder", () => {
     const app = read("App/PhrabitCaptureApp.swift");
     const guest = read("App/GuestCaptureHomeView.swift");
     const core = read("Core/Sources/PhrabitCaptureCore/GuestCaptureFlow.swift");
     const overlay = read("guest-preview.yml");
     const model = read("App/CaptureViewModel.swift");
-    assert.match(app, /#if !\(DEBUG && PHRABIT_OFFLINE_GUEST_HOME\)\s+@StateObject private var preview/);
-    assert.match(app, /#if DEBUG && PHRABIT_OFFLINE_GUEST_HOME\s+GuestCaptureHomeView\(\)[\s\S]*?#else\s+switch preview\.mode/);
-    assert.match(guest, /^#if DEBUG && \(PHRABIT_OFFLINE_GUEST_HOME \|\| PHRABIT_OFFLINE_TRANSLATION_HOME\)/);
+    assert.match(app, /#if !\(PHRABIT_OFFLINE_GUEST_TESTFLIGHT \|\| \(DEBUG && PHRABIT_OFFLINE_GUEST_HOME\)\)\s+@StateObject private var preview/);
+    assert.match(app, /#if PHRABIT_OFFLINE_GUEST_TESTFLIGHT && \(PHRABIT_LOCAL_LIVE_AUDIO[^\n]+\)\s+#error/);
+    assert.match(app, /#if PHRABIT_OFFLINE_GUEST_TESTFLIGHT\s+if[^\n]+PhrabitOfflineGuestTestFlight[^\n]+\n[^\n]+PhrabitPreviewAuthOnly[^\n]+\n\s+GuestCaptureHomeView\(\)[\s\S]*?#elseif DEBUG && PHRABIT_OFFLINE_GUEST_HOME\s+GuestCaptureHomeView\(\)[\s\S]*?#else\s+switch preview\.mode/);
+    assert.match(guest, /^#if PHRABIT_OFFLINE_GUEST_TESTFLIGHT \|\| \(DEBUG && \(PHRABIT_OFFLINE_GUEST_HOME \|\| PHRABIT_OFFLINE_TRANSLATION_HOME\)\)/);
     assert.match(guest, /let sendsAudio = false/);
     assert.doesNotMatch(guest, /URLSession|CaptureHTTPProcessor|CapturePreviewAuthLaunch|ASWebAuthenticationSession|https?:/);
     assert.match(guest, /recordingAllowed: \{ consent\.allowed && Self\.currentPermission == \.allowed \}/);
@@ -341,9 +342,11 @@ const checks = [
     assert.match(overlay, /com\.phrabit\.app\.guestpreview\.control/);
     assert.doesNotMatch(overlay, /Release:|PhrabitPreview|PHRABIT_LOCAL_LIVE_AUDIO/);
     const signingWorkflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
-    assert.doesNotMatch(read("project.yml") + signingWorkflow, /PHRABIT_OFFLINE_GUEST_HOME/);
+    assert.doesNotMatch(read("project.yml") + signingWorkflow, /PHRABIT_OFFLINE_GUEST_(?:HOME|TESTFLIGHT)/);
+    assert.match(signingWorkflow, /\(inputs\.offline_internal_variant == 'guest-home' && inputs\.confirm_guest_no_auto_distribution\)/);
     const unsignedWorkflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
     assert.match(unsignedWorkflow, /inputs\.compile_translation_home[\s\S]*?PHRABIT_OFFLINE_TRANSLATION_HOME[\s\S]*?CODE_SIGNING_ALLOWED=NO/);
+    assert.match(unsignedWorkflow, /inputs\.compile_guest_home[\s\S]*?guestUnsignedSpec\(\)[\s\S]*?-configuration Release[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?PhrabitOfflineGuestTestFlight/);
   }],
   ["offline prototype privacy declarations match the native APIs", () => {
     const applicationPrivacy = read("App/PrivacyInfo.xcprivacy");

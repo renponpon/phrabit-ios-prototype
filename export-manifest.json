@@ -9,8 +9,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/README.md",
-      "bytes": 8806,
-      "sha256": "8e70369834b2799bc16b2234adc5e7db3c8928c98dfd5ff6a79f2684b9304bff"
+      "bytes": 10348,
+      "sha256": "d3bf50dab2d78952a04163f783a92e92de301812c31c9814663b871344040774"
     },
     {
       "path": "native/ios/PhrabitCapture/project.yml",
@@ -74,8 +74,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/App/PhrabitCaptureApp.swift",
-      "bytes": 3498,
-      "sha256": "0bcc312101ca3be6eb214f904b5ebedfb828f69e162121eb2647f1890992d8e8"
+      "bytes": 4379,
+      "sha256": "75d9824237df62dae32857b7880c6dc8fde5254e6331b368cdd51dd3cfe89a50"
     },
     {
       "path": "native/ios/PhrabitCapture/App/PrivacyInfo.xcprivacy",
@@ -204,18 +204,18 @@
     },
     {
       "path": ".github/workflows/ios-prototype.yml",
-      "bytes": 13287,
-      "sha256": "7e26073f2c9d55887c37e153be881712b2334d7862e0134592a58d869faae4c7"
+      "bytes": 15513,
+      "sha256": "f60d40631fbb8da28f20bb607638a5d5f8878a6e0974220181b4bc7f19ca4d0d"
     },
     {
       "path": ".github/workflows/ios-testflight.yml",
-      "bytes": 6951,
-      "sha256": "1577588a87b7bdf07b64f522553aaad82a00937d201546fa96e09e3f712a6ef2"
+      "bytes": 7587,
+      "sha256": "1b7d3cb35b78b466d2a46f94ace78da3fd3cb1be29c45e3a400bffd3ebdae01d"
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 28840,
-      "sha256": "115a0e68a8d26ac13b40a4e18ce2dc09d08276f0d687e78e431847f310a1ff4a"
+      "bytes": 29534,
+      "sha256": "b3e67b18fe7122aec8f3f96d1ea029df53cb58fab8a0cde364ae6e9f19d14298"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
@@ -234,13 +234,13 @@
     },
     {
       "path": "scripts/ios-testflight.mjs",
-      "bytes": 37406,
-      "sha256": "36c10bcf05647fcd02d9b784dbaa0055f4521a8669a882a6d424f53adbebcd2a"
+      "bytes": 38627,
+      "sha256": "90100f817748834782633c7f6548b6465957740b139fd7c098d1e2a835cc1dea"
     },
     {
       "path": "scripts/ios-testflight.test.mjs",
-      "bytes": 28712,
-      "sha256": "27103576605f937d5f90e6533bf1119466e7e8e63ed9bc76df46b2e38ee80c87"
+      "bytes": 30744,
+      "sha256": "e291f974bf25a4d86fa7f1e01eb8f713bc9be4bc0f3b34082948284940f21331"
     },
     {
       "path": "public/icons/icon-512.png",
@@ -279,8 +279,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/App/GuestCaptureHomeView.swift",
-      "bytes": 15429,
-      "sha256": "3a01169f0a11bef3b6acd0a51f697cd0bb0ad624beb9d666cfd334aa5a40a3d2"
+      "bytes": 15467,
+      "sha256": "6e1da64f66e9ad9998e44c4a666305ec8a845bce86b43c012bc1a58b4be1625f"
     },
     {
       "path": "native/ios/PhrabitCapture/Core/Sources/PhrabitCaptureCore/GuestCaptureFlow.swift",

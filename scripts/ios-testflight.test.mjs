@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { approvedPreviewProjectDigest, assertTestFlightUploadAllowed, audioPilotMode, classifyCommandFailure, dependencyRevisions, distributionSpec, inspectEncryptionEvidence, offlineInternalVariant, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
+import { approvedPreviewProjectDigest, assertTestFlightUploadAllowed, audioPilotMode, classifyCommandFailure, dependencyRevisions, distributionSpec, guestUnsignedSpec, inspectEncryptionEvidence, offlineInternalVariant, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
 
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
@@ -248,8 +248,8 @@ test('offline variants are opt-in and reject online modes and settings', () => {
   for (const invalid of ['yes', '', 'translation-home,startup-timing']) {
     assert.throws(() => offlineInternalVariant({ IOS_OFFLINE_INTERNAL_VARIANT: invalid }), /Invalid offline internal variant/);
   }
-  for (const variant of ['startup-timing', 'translation-home']) {
-    const selected = { IOS_OFFLINE_INTERNAL_VARIANT: variant };
+  for (const variant of ['startup-timing', 'translation-home', 'guest-home']) {
+    const selected = { IOS_OFFLINE_INTERNAL_VARIANT: variant, IOS_GUEST_NO_AUTO_DISTRIBUTION: String(variant === 'guest-home') };
     assert.equal(offlineInternalVariant(selected), variant);
     for (const conflict of ['IOS_PREVIEW_AUTH_ONLY', 'IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
       assert.throws(() => offlineInternalVariant({ ...selected, [conflict]: 'true' }), /exclude Preview modes/);
@@ -262,17 +262,33 @@ test('offline variants are opt-in and reject online modes and settings', () => {
   }
 });
 
+test('guest upload requires its own confirmation and uses the same Release settings as the unsigned build', () => {
+  assert.throws(() => offlineInternalVariant({ IOS_OFFLINE_INTERNAL_VARIANT: 'guest-home' }), /own automatic distribution check/);
+  assert.throws(() => offlineInternalVariant({ IOS_OFFLINE_INTERNAL_VARIANT: 'translation-home', IOS_GUEST_NO_AUTO_DISTRIBUTION: 'true' }), /own automatic distribution check/);
+  const unsigned = guestUnsignedSpec();
+  const signed = distributionSpec('TESTTEAM01', appUuid, controlUuid, '17.1', undefined, 'guest-home');
+  assert.equal(Object.hasOwn(unsigned, 'settings'), false);
+  for (const [name, target] of Object.entries(unsigned.targets)) {
+    assert.deepEqual(target.settings, { configs: signed.targets[name].settings.configs });
+    assert.deepEqual(target.info, signed.targets[name].info);
+  }
+  assert.deepEqual(signed.targets.PhrabitCapture.info.properties['CFBundleURLTypes:REPLACE'], []);
+  assert.equal(distributionSpec('TESTTEAM01', appUuid, controlUuid, '17.1').targets.PhrabitCapture.info.properties['CFBundleURLTypes:REPLACE'], undefined);
+});
+
 test('each offline variant signs both targets without the other variant or a compliance answer', () => {
+  const guestMarker = 'PhrabitOfflineGuestTestFlight';
   const variants = [
-    ['startup-timing', 'PHRABIT_OFFLINE_STARTUP_TIMING', 'PhrabitOfflineStartupTiming', 'PhrabitOfflineTranslationHome'],
-    ['translation-home', 'PHRABIT_OFFLINE_TRANSLATION_HOME', 'PhrabitOfflineTranslationHome', 'PhrabitOfflineStartupTiming']
+    ['startup-timing', 'PHRABIT_OFFLINE_STARTUP_TIMING', 'PhrabitOfflineStartupTiming'],
+    ['translation-home', 'PHRABIT_OFFLINE_TRANSLATION_HOME', 'PhrabitOfflineTranslationHome'],
+    ['guest-home', 'PHRABIT_OFFLINE_GUEST_TESTFLIGHT', guestMarker]
   ];
-  for (const [variant, flag, marker, otherMarker] of variants) {
+  for (const [variant, flag, marker] of variants) {
     const build = distributionSpec('TESTTEAM01', appUuid, controlUuid, '14.1', undefined, variant);
     for (const target of Object.values(build.targets)) {
       assert.equal(target.settings.configs.Release.SWIFT_ACTIVE_COMPILATION_CONDITIONS, `$(inherited) ${flag}`);
       assert.equal(target.info.properties[marker], true);
-      for (const property of [otherMarker, 'PhrabitPreviewAuthOnly', 'PhrabitDiagnosticsOnly', 'ITSAppUsesNonExemptEncryption', 'ITSEncryptionExportComplianceCode']) {
+      for (const property of ['PhrabitOfflineTranslationHome', 'PhrabitOfflineStartupTiming', guestMarker, 'PhrabitPreviewAuthOnly', 'PhrabitDiagnosticsOnly', 'ITSAppUsesNonExemptEncryption', 'ITSEncryptionExportComplianceCode'].filter(property => property !== marker)) {
         assert.equal(Object.hasOwn(target.info.properties, property), false);
       }
     }
@@ -282,11 +298,12 @@ test('each offline variant signs both targets without the other variant or a com
   const usual = distributionSpec('TESTTEAM01', appUuid, controlUuid, '14.1');
   assert.equal(usual.targets.PhrabitCapture.info.properties.PhrabitOfflineStartupTiming, undefined);
   assert.equal(usual.targets.PhrabitCapture.info.properties.PhrabitOfflineTranslationHome, undefined);
+  assert.equal(usual.targets.PhrabitCapture.info.properties[guestMarker], undefined);
   assert.equal(usual.targets.PhrabitCaptureControl.settings.configs, undefined);
 });
 
 test('offline submissions require the inspected exact variant and are isolated from normal and pilot upload', () => {
-  for (const [variant, otherVariant] of [['startup-timing', 'translation-home'], ['translation-home', 'startup-timing']]) {
+  for (const [variant, otherVariant] of [['startup-timing', 'translation-home'], ['translation-home', 'guest-home'], ['guest-home', 'startup-timing']]) {
     const valid = { audioPilotMode: null, audioPilotVariant: 'none', offlineInternalVariant: variant, previewAuthOnly: false, offlineInspectionPassed: true };
     assert.doesNotThrow(() => assertTestFlightUploadAllowed(valid, 'none', variant));
     assert.throws(() => assertTestFlightUploadAllowed(valid, 'none'), /separate internal upload stage/);
@@ -298,8 +315,10 @@ test('offline submissions require the inspected exact variant and are isolated f
     }
   }
   const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /offline_internal_variant:\s+description:[^\r\n]+\s+type: choice\s+required: false\s+default: 'none'\s+options:\s+- 'none'\s+- startup-timing\s+- translation-home/);
-  assert.match(workflow, /name: Submit the inspected offline build for internal testing only\s+if: \$\{\{ inputs\.offline_internal_variant == 'startup-timing' \|\| inputs\.offline_internal_variant == 'translation-home' \}\}\s+env:\s+IOS_OFFLINE_INTERNAL_VARIANT: \$\{\{ inputs\.offline_internal_variant \}\}[\s\S]*?run: node scripts\/ios-testflight\.mjs upload-offline/);
+  assert.match(workflow, /offline_internal_variant:\s+description:[^\r\n]+\s+type: choice\s+required: false\s+default: 'none'\s+options:\s+- 'none'\s+- startup-timing\s+- translation-home\s+- guest-home/);
+  assert.match(workflow, /confirm_guest_no_auto_distribution:\s+description:[^\r\n]+\s+type: boolean\s+required: false\s+default: false/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/main' && inputs\.confirm_internal_only && inputs\.confirm_guest_no_auto_distribution == \(inputs\.offline_internal_variant == 'guest-home'\)/);
+  assert.match(workflow, /name: Submit the inspected offline build for internal testing only\s+if: \$\{\{ inputs\.offline_internal_variant == 'startup-timing' \|\| inputs\.offline_internal_variant == 'translation-home' \|\| \(inputs\.offline_internal_variant == 'guest-home' && inputs\.confirm_guest_no_auto_distribution\) \}\}\s+env:\s+IOS_OFFLINE_INTERNAL_VARIANT:[^\r\n]+\s+IOS_GUEST_NO_AUTO_DISTRIBUTION:[^\r\n]+[\s\S]*?run: node scripts\/ios-testflight\.mjs upload-offline/);
   for (const setting of ['IOS_PREVIEW_PROJECT_REF', 'IOS_PREVIEW_PUBLISHABLE_KEY']) {
     assert.ok(workflow.includes(`${setting}: \${{ inputs.offline_internal_variant == 'none' && secrets.${setting} || '' }}`));
   }
@@ -318,6 +337,7 @@ test('direct offline upload rejects an omitted or mismatched variant before read
     for (const [settings, message] of [
       [{}, /Explicit offline variant required/],
       [{ IOS_OFFLINE_INTERNAL_VARIANT: 'startup-timing' }, /exact variant match/],
+      [{ IOS_OFFLINE_INTERNAL_VARIANT: 'guest-home' }, /own automatic distribution check/],
     ]) {
       const result = spawnSync(process.execPath, [script, 'upload-offline'], {
         env: { ...approved, ...settings, RUNNER_TEMP: runner }, encoding: 'utf8', timeout: 5_000,

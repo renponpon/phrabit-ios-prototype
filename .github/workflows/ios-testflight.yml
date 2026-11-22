@@ -64,6 +64,12 @@ on:
           - 'none'
           - startup-timing
           - translation-home
+          - guest-home
+      confirm_guest_no_auto_distribution:
+        description: ゲスト試作の提出前に、既存の本人グループのみ・自動配布なしを確認済み
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -74,7 +80,7 @@ concurrency:
 
 jobs:
   distribute:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.confirm_internal_only }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirm_internal_only && inputs.confirm_guest_no_auto_distribution == (inputs.offline_internal_variant == 'guest-home') }}
     runs-on: macos-26-intel
     timeout-minutes: 20
     environment: ios-testflight
@@ -110,6 +116,7 @@ jobs:
           IOS_AUDIO_PILOT_VARIANT: ${{ inputs.audio_pilot_variant }}
           IOS_AUDIO_PILOT_NO_AUTO_DISTRIBUTION: ${{ inputs.confirm_audio_pilot_no_auto_distribution }}
           IOS_OFFLINE_INTERNAL_VARIANT: ${{ inputs.offline_internal_variant }}
+          IOS_GUEST_NO_AUTO_DISTRIBUTION: ${{ inputs.confirm_guest_no_auto_distribution }}
           IOS_PREVIEW_PROJECT_REF: ${{ inputs.offline_internal_variant == 'none' && secrets.IOS_PREVIEW_PROJECT_REF || '' }}
           IOS_PREVIEW_PUBLISHABLE_KEY: ${{ inputs.offline_internal_variant == 'none' && secrets.IOS_PREVIEW_PUBLISHABLE_KEY || '' }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -138,9 +145,10 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: node scripts/ios-testflight.mjs upload-audio-pilot
       - name: Submit the inspected offline build for internal testing only
-        if: ${{ inputs.offline_internal_variant == 'startup-timing' || inputs.offline_internal_variant == 'translation-home' }}
+        if: ${{ inputs.offline_internal_variant == 'startup-timing' || inputs.offline_internal_variant == 'translation-home' || (inputs.offline_internal_variant == 'guest-home' && inputs.confirm_guest_no_auto_distribution) }}
         env:
           IOS_OFFLINE_INTERNAL_VARIANT: ${{ inputs.offline_internal_variant }}
+          IOS_GUEST_NO_AUTO_DISTRIBUTION: ${{ inputs.confirm_guest_no_auto_distribution }}
           ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
