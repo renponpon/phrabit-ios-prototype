@@ -1,5 +1,11 @@
 # Phrabit iPhone音声翻訳プロトタイプ
 
+## ゲスト向け初回設定の試作（Debug限定）
+
+Macでこの候補の `native/ios/PhrabitCapture` から `xcodegen generate --spec guest-preview.yml` を実行すると、ゲスト画面のDebug構成を生成できます。署名なしのコンパイル確認は `xcodebuild -scheme PhrabitCapture -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`。アプリとコントロールのDebug識別子は既存と分けています。既存の未署名ワークフローで `compile_translation_home` を選ぶと、従来の起動画面を変更せず、ゲスト画面のSwiftUIもコンパイルします。通常構成や署名ワークフローではこの画面を選びません。
+
+同意前の無送信見本、マイク許可／拒否、ロック画面の手動追加と後回し、録音キャンセルを確認します。許可後の録音は端末内だけで15秒まで。英語・中国語の表示は固定見本です。設定の「模擬応答」で、日次枠・全体枠・通信切れ・端末確認・短時間制限・送信後失敗を選べます。残り回数と更新時刻はローカルの模擬値です。実API、ログイン、App Attest、実際の台帳には接続しません。
+
 ## このコードの範囲
 
 iOS 18以上を対象としたSwiftUIの録音画面と、WidgetKitのロック画面コントロールです。既定のアプリは `MockCaptureProcessor` を使い、録音内容にかかわらず固定サンプルを表示します。実サーバーの接続先・認証情報・AIキーは組み込んでいません。

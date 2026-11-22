@@ -21,6 +21,7 @@ final class CaptureViewModel: ObservableObject {
     private let processor: any CaptureProcessing
     private let recordingAllowed: () -> Bool
     private let authenticationRequired: () -> Void
+    private let recordingDuration: TimeInterval?
     @Published var accessSetupRequested = false
     @Published private(set) var recognizedText: String?
     #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
@@ -38,14 +39,20 @@ final class CaptureViewModel: ObservableObject {
         return false
     }
 
-    init(processor: (any CaptureProcessing)? = nil, recordingAllowed: @escaping () -> Bool = { true }, authenticationRequired: @escaping () -> Void = {}) {
+    init(processor: (any CaptureProcessing)? = nil, recordingAllowed: @escaping () -> Bool = { true },
+         authenticationRequired: @escaping () -> Void = {}, recordingDuration: TimeInterval? = nil) {
         self.processor = processor ?? MockCaptureProcessor()
         self.recordingAllowed = recordingAllowed
         self.authenticationRequired = authenticationRequired
+        self.recordingDuration = recordingDuration
         language = CaptureLanguage(rawValue: UserDefaults.standard.string(forKey: Self.languageKey) ?? "") ?? .chinese
         setupComplete = UserDefaults.standard.bool(forKey: Self.setupKey)
         recorder.onTimeLimit = { [weak self] in
             guard let self else { return }
+            if let recordingDuration = self.recordingDuration {
+                self.recordingFailed("\(Int(recordingDuration))秒に達したため録音を破棄しました。音声は送信していません。")
+                return
+            }
             #if PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_PREVIEW_TRANSLATION_HOME
             self.recordingFailed("20秒に達したため録音を破棄しました。")
             #else
@@ -158,11 +165,13 @@ final class CaptureViewModel: ObservableObject {
             #endif
             do {
                 #if PHRABIT_OFFLINE_STARTUP_TIMING
-                try await self.recorder.start(authorized: self.recordingAllowed, onStartup: { checkpoint in
+                try await self.recorder.start(maximumDuration: self.recordingDuration ?? CaptureSession.maximumRecordingDuration,
+                                              authorized: self.recordingAllowed, onStartup: { checkpoint in
                     timing.mark(checkpoint, at: ProcessInfo.processInfo.systemUptime)
                 })
                 #else
-                try await self.recorder.start(authorized: self.recordingAllowed)
+                try await self.recorder.start(maximumDuration: self.recordingDuration ?? CaptureSession.maximumRecordingDuration,
+                                              authorized: self.recordingAllowed)
                 #endif
                 guard self.session.operationID == identifier else { return }
                 self.recordingStartedAt = Date()

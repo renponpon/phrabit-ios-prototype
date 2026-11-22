@@ -1,0 +1,18 @@
+include:
+  - project.yml
+targets:
+  PhrabitCapture:
+    settings:
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.app.guestpreview
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) PHRABIT_OFFLINE_GUEST_HOME'
+    info:
+      properties:
+        CFBundleDisplayName: Phrabit画面試作
+        CFBundleURLTypes:REPLACE: []
+  PhrabitCaptureControl:
+    settings:
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.app.guestpreview.control

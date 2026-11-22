@@ -71,7 +71,8 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
     }
     #endif
 
-    func start(authorized: () -> Bool, onStartup: (CaptureStartupTiming.Checkpoint) -> Void = { _ in }) async throws {
+    func start(maximumDuration: TimeInterval = CaptureSession.maximumRecordingDuration, authorized: () -> Bool,
+               onStartup: (CaptureStartupTiming.Checkpoint) -> Void = { _ in }) async throws {
         let permitted: Bool
         switch AVAudioApplication.shared.recordPermission {
         case .granted:
@@ -119,7 +120,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
                 throw RecordingError.unavailable
             }
             onStartup(.recorderPrepared)
-            guard audioRecorder.record(forDuration: CaptureSession.maximumRecordingDuration) else {
+            guard audioRecorder.record(forDuration: maximumDuration) else {
                 throw RecordingError.unavailable
             }
             startedAtUptime = ProcessInfo.processInfo.systemUptime

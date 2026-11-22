@@ -4,11 +4,17 @@ import PhrabitCaptureCore
 @main
 @MainActor
 struct PhrabitCaptureApp: App {
+    #if !(DEBUG && PHRABIT_OFFLINE_GUEST_HOME)
     @StateObject private var preview = CapturePreviewAuthLaunch()
     @Environment(\.scenePhase) private var scenePhase
+    #endif
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG && PHRABIT_OFFLINE_GUEST_HOME
+            GuestCaptureHomeView()
+                .preferredColorScheme(.dark)
+            #else
             switch preview.mode {
             case .offline(let model, let access):
                 #if PHRABIT_OFFLINE_TRANSLATION_HOME
@@ -31,9 +37,11 @@ struct PhrabitCaptureApp: App {
                 recordingView(model: model, access: access, diagnostics: diagnostics, audioPilot: true)
                 #endif
             }
+            #endif
         }
     }
 
+    #if !(DEBUG && PHRABIT_OFFLINE_GUEST_HOME)
     private func recordingView(model: CaptureViewModel, access: CaptureAccessController, diagnostics: CaptureConnectionDiagnostics? = nil, localPreview: Bool = false, audioPilot: Bool = false) -> some View {
         captureLifecycle(CaptureView(model: model, access: access, diagnostics: diagnostics, localPreview: localPreview, audioPilot: audioPilot), model: model)
     }
@@ -65,5 +73,6 @@ struct PhrabitCaptureApp: App {
                 }
             }
     }
+    #endif
 }
 

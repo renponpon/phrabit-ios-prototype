@@ -101,7 +101,8 @@ const checks = [
     assert.match(read("Core/Sources/PhrabitCaptureCore/CaptureSession.swift"), /maximumRecordingDuration: TimeInterval = 20/);
     const recorder = read("App/AudioRecorder.swift");
     assert.match(recorder, /AVAudioApplication\.requestRecordPermission/);
-    assert.match(recorder, /record\(forDuration: CaptureSession\.maximumRecordingDuration\)/);
+    assert.match(recorder, /maximumDuration: TimeInterval = CaptureSession\.maximumRecordingDuration/);
+    assert.match(recorder, /record\(forDuration: maximumDuration\)/);
     assert.match(recorder, /FileProtectionType\.complete/);
     assert.match(recorder, /removeItem\(at: url\)/);
     assert.match(read("App/CaptureViewModel.swift"), /defer \{ try\? FileManager\.default\.removeItem\(at: recordingURL\) \}/);
@@ -315,6 +316,34 @@ const checks = [
     assert.match(view, /Text\(translation\.sourceText\)[\s\S]*?Text\(translation\.targetText\)[\s\S]*?if let reading = translation\.reading/);
     assert.match(view, /CaptureAccessView\(access: access, diagnostics: diagnostics, audioPilot: true\)/);
     assert.doesNotMatch(view, /\.onDismiss|beginRecording|transcribe\(audio:/);
+  }],
+  ["guest home is Debug-only, offline and reuses the guarded recorder", () => {
+    const app = read("App/PhrabitCaptureApp.swift");
+    const guest = read("App/GuestCaptureHomeView.swift");
+    const core = read("Core/Sources/PhrabitCaptureCore/GuestCaptureFlow.swift");
+    const overlay = read("guest-preview.yml");
+    const model = read("App/CaptureViewModel.swift");
+    assert.match(app, /#if !\(DEBUG && PHRABIT_OFFLINE_GUEST_HOME\)\s+@StateObject private var preview/);
+    assert.match(app, /#if DEBUG && PHRABIT_OFFLINE_GUEST_HOME\s+GuestCaptureHomeView\(\)[\s\S]*?#else\s+switch preview\.mode/);
+    assert.match(guest, /^#if DEBUG && \(PHRABIT_OFFLINE_GUEST_HOME \|\| PHRABIT_OFFLINE_TRANSLATION_HOME\)/);
+    assert.match(guest, /let sendsAudio = false/);
+    assert.doesNotMatch(guest, /URLSession|CaptureHTTPProcessor|CapturePreviewAuthLaunch|ASWebAuthenticationSession|https?:/);
+    assert.match(guest, /recordingAllowed: \{ consent\.allowed && Self\.currentPermission == \.allowed \}/);
+    assert.match(guest, /CaptureLaunchRequest\.consume\(\)[\s\S]*?requestRecording\(\)/);
+    assert.match(guest, /recordingDuration: GuestCaptureFixture\.maximumRecordingDuration/);
+    assert.match(guest, /AVAudioApplication\.requestRecordPermission/);
+    assert.match(guest, /model\.stopAndTranslate/);
+    assert.match(model, /maximumDuration: self\.recordingDuration \?\? CaptureSession\.maximumRecordingDuration/);
+    assert.match(core, /maximumRecordingDuration: TimeInterval = 15/);
+    assert.match(core, /guard !submitted\.contains\(id\)/);
+    assert.match(core, /!simulatedIssue\.consumesAttempt/);
+    assert.match(overlay, /Debug:[\s\S]*?PHRABIT_OFFLINE_GUEST_HOME/);
+    assert.match(overlay, /com\.phrabit\.app\.guestpreview\.control/);
+    assert.doesNotMatch(overlay, /Release:|PhrabitPreview|PHRABIT_LOCAL_LIVE_AUDIO/);
+    const signingWorkflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
+    assert.doesNotMatch(read("project.yml") + signingWorkflow, /PHRABIT_OFFLINE_GUEST_HOME/);
+    const unsignedWorkflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
+    assert.match(unsignedWorkflow, /inputs\.compile_translation_home[\s\S]*?PHRABIT_OFFLINE_TRANSLATION_HOME[\s\S]*?CODE_SIGNING_ALLOWED=NO/);
   }],
   ["offline prototype privacy declarations match the native APIs", () => {
     const applicationPrivacy = read("App/PrivacyInfo.xcprivacy");
