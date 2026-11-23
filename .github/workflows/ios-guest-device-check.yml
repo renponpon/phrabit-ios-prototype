@@ -1,0 +1,48 @@
+name: iOS guest device check - unsigned
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_unsigned:
+        description: 端末確認のコンパイル・模擬テストのみ（署名・配布なし）
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: ${{ inputs.confirm_unsigned && github.repository == 'renponpon/phrabit-ios-prototype' && github.ref == 'refs/heads/main' }}
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    defaults:
+      run:
+        shell: bash
+        working-directory: native/ios/PhrabitCapture/GuestAttest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check isolation from shipped targets
+        working-directory: .
+        run: node scripts/check-ios-prototype.mjs
+      - name: Test the device flow with simulated keys and transport
+        run: swift test --scratch-path "$RUNNER_TEMP/phrabit-guest-device-check-swift"
+      - name: Compile the iPhone-only DeviceCheck and Keychain adapters
+        run: |
+          set -euo pipefail
+          schemes="$(xcodebuild -list -json)"
+          scheme="$(printf '%s' "$schemes" | node -e '
+            const info = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            const values = info.workspace?.schemes ?? info.project?.schemes ?? [];
+            const match = ["PhrabitGuestAttest", "PhrabitGuestAttest-Package"].find(name => values.includes(name));
+            if (!match) process.exit(1);
+            process.stdout.write(match);
+          ')"
+          xcodebuild -scheme "$scheme" -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/phrabit-guest-device-check-ios" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build

@@ -53,7 +53,7 @@ const checks = [
   ["default application remains offline; dormant client has no embedded credentials or origin", () => {
     const swiftSources = listFiles(prototypeRoot)
       .filter((file) => file.endsWith(".swift") && path.basename(file) !== "Package.swift" && !file.includes(`${path.sep}Tests${path.sep}`))
-      .filter((file) => !["GuestConnection", "GuestConnectionTests"].includes(path.relative(prototypeRoot, file).split(path.sep)[0]))
+      .filter((file) => !["GuestConnection", "GuestConnectionTests", "GuestAttest"].includes(path.relative(prototypeRoot, file).split(path.sep)[0]))
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
     assert.doesNotMatch(swiftSources, /https?:\/\/|GEMINI_API_KEY|OPENAI_API_KEY|SUPABASE|import Speech|FoundationModels/);
@@ -62,6 +62,22 @@ const checks = [
     assert.match(read("App/CapturePreviewAuthView.swift"), /mode = \.offline\(CaptureViewModel\(\), \.mock\(\)\)/);
     assert.match(read("App/CaptureView.swift"), /模擬翻訳・音声は送信しません/);
     assert.match(read("App/CaptureView.swift"), /サンプル入力・録音内容ではありません/);
+  }],
+  ["guest device proof is isolated from all shipping targets and accepts only its three proof routes", () => {
+    const signing = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
+    assert.doesNotMatch(read("project.yml") + read("guest-connection.yml") + signing, /GuestAttest|DEVICE_CHECK/);
+    const source = "GuestAttest/Sources/PhrabitGuestAttest/";
+    const api = read(source + "GuestCheckJSONAPI.swift");
+    const transport = read(source + "GuestCheckPreviewTransport.swift");
+    const sources = listFiles(path.join(prototypeRoot, source)).map(file => readFileSync(file, "utf8")).join("\n");
+    assert.deepEqual([...api.matchAll(/case\s+\w+ = "([^"]+)"/g)].map(match => match[1]), [
+      "/api/ios/guest/challenge", "/api/ios/guest/register", "/api/ios/guest/device-check",
+    ]);
+    assert.doesNotMatch(sources, /\/capture\b|AVAudio|Speech|SUPABASE|OPENAI|GEMINI|Bearer|bypass/i);
+    assert.match(transport, /URLSessionConfiguration\.ephemeral/);
+    assert.match(transport, /completionHandler\(nil\)/);
+    assert.match(transport, /x-phrabit-preview-pass/);
+    assert.match(transport, /renponpons-projects/);
   }],
   ["auth uses an exact stable SDK version and keeps configuration outside the default app", () => {
     assert.match(read("Core/Package.swift"), /exact: "2\.55\.7"/);
