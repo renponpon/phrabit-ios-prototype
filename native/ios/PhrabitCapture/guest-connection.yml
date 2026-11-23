@@ -1,0 +1,57 @@
+name: PhrabitGuestConnection
+options:
+  minimumXcodeGenVersion: 2.44.0
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: ja
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGNING_ALLOWED: "NO"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  PhrabitGuestConnection:
+    type: application
+    platform: iOS
+    sources:
+      - GuestConnection
+      - path: App/Assets.xcassets
+        buildPhase: resources
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.app.guestconnection
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.app
+    info:
+      path: Generated/GuestConnection-Info.plist
+      properties:
+        CFBundleDisplayName: Phrabit接続検証
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+  PhrabitGuestConnectionTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - GuestConnectionTests
+    dependencies:
+      - target: PhrabitGuestConnection
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.app.guestconnection.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+schemes:
+  PhrabitGuestConnection:
+    build:
+      targets:
+        PhrabitGuestConnection: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PhrabitGuestConnectionTests

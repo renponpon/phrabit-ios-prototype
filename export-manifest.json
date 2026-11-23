@@ -214,8 +214,8 @@
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 29534,
-      "sha256": "b3e67b18fe7122aec8f3f96d1ea029df53cb58fab8a0cde364ae6e9f19d14298"
+      "bytes": 30744,
+      "sha256": "fcdd39d5413764e5045468ea5300d0600686c5fac6b3afe9c08463accd62e2a0"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
@@ -249,8 +249,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 1025,
-      "sha256": "d423a9fb8e579e71371b28556cfa597e087092bada181b05016bacf22b42b54c"
+      "bytes": 1524,
+      "sha256": "e1e583a1470b0556ae9971dc33e88fc17b370ef17303ed9812bd8ce789d9dd92"
     },
     {
       "path": "native/ios/PhrabitCapture/Core/Sources/PhrabitCaptureCore/CaptureStartupTiming.swift",
@@ -296,6 +296,31 @@
       "path": "native/ios/PhrabitCapture/guest-preview.yml",
       "bytes": 508,
       "sha256": "af8124f29f674a723301c1221136cc7a315c8f1e4e8705af50ff1b628b831feb"
+    },
+    {
+      "path": ".github/workflows/ios-guest-connection.yml",
+      "bytes": 4236,
+      "sha256": "31e45520499f9e3a61f0db69c29ed9048b40f4563f0b452aac584f044eaa98ca"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/guest-connection.yml",
+      "bytes": 1434,
+      "sha256": "15c0eb42790ee72b223ccd958e01ee75e75aafeaa2c42263035714738efb0d20"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/GuestConnection/GuestConnectionURL.swift",
+      "bytes": 569,
+      "sha256": "7f15a37bc04ddc7aa67bbcb7a702e07218a3cd4270906cb02807537f26854154"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/GuestConnection/PhrabitGuestConnectionApp.swift",
+      "bytes": 2210,
+      "sha256": "0b05bd9570548bf764737847639eea1f6a582b9d203693dd1ddc130f5b65521f"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/GuestConnectionTests/GuestConnectionURLTests.swift",
+      "bytes": 1472,
+      "sha256": "ae66dd9ad1a7ca0c9b14eccf85db8dfb1e53fe77f8b5096f0d60f3be085817c5"
     }
   ]
 }

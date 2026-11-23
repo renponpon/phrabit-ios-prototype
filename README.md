@@ -9,4 +9,9 @@ SwiftUIの録音画面とロック画面コントロールの試作です。訳�
 
 [クラウドビルドの実行結果](https://github.com/renponpon/phrabit-ios-prototype/actions/workflows/ios-prototype.yml)で、検証したコミットと結果を確認できます。ビルド成功とiPhoneの実機検証は別です。
 
+## 録音なしの接続確認版
+
+別の `guest-connection.yml` で生成する試作です。案内された専用PreviewのURLを標準ブラウザで開くだけで、録音・送信・保存・アプリ内認証は行いません。
+[接続確認専用の手動ビルド](https://github.com/renponpon/phrabit-ios-prototype/actions/workflows/ios-guest-connection.yml)はURL検証のXCTestとSimulator・端末向けの無署名ビルドのみ行い、接続先にはアクセスしません。
+
 実装内容・未確認事項・検証手順は [native README](native/ios/PhrabitCapture/README.md) を参照してください。

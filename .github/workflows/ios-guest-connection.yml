@@ -1,0 +1,89 @@
+name: iOS guest connection - unsigned
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_unsigned:
+        description: 接続確認版のビルドのみ（署名・外部アクセス・配布なし）
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-guest-connection-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: ${{ inputs.confirm_unsigned && github.repository == 'renponpon/phrabit-ios-prototype' && github.ref == 'refs/heads/main' }}
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Generate the isolated iOS project
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen generate --spec guest-connection.yml
+      - name: Build and run XCTest on an iPhone simulator
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          simulator="$(xcrun simctl list devices available -j | node --input-type=commonjs -e '
+            const assert = require("node:assert/strict");
+            const { devices } = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            const runtime = "com.apple.CoreSimulator.SimRuntime.iOS-" + process.argv[1].split(".").slice(0, 2).join("-");
+            const phone = devices[runtime]?.find(device => device.isAvailable && device.name.startsWith("iPhone "));
+            assert.match(phone?.udid ?? "", /^[A-F0-9-]{36}$/i, "An available iPhone simulator is required");
+            process.stdout.write(phone.udid);
+          ' "$sdk")"
+          xcodebuild -project PhrabitGuestConnection.xcodeproj -scheme PhrabitGuestConnection \
+            -configuration Debug -destination "platform=iOS Simulator,id=$simulator" \
+            -parallel-testing-enabled NO -derivedDataPath build/GuestConnectionSimulator \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO test
+      - name: Build and inspect the unsigned device app
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          set -euo pipefail
+          xcodebuild -project PhrabitGuestConnection.xcodeproj -scheme PhrabitGuestConnection \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath build/GuestConnectionDevice CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+          app=build/GuestConnectionDevice/Build/Products/Release-iphoneos/PhrabitGuestConnection.app
+          info="$app/Info.plist"
+          test -f "$info"
+          plutil -lint "$info"
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$info")" = com.phrabit.app
+          test ! -e "$app/embedded.mobileprovision"
+          test ! -d "$app/_CodeSignature"
+          test ! -d "$app/PlugIns"
+          for key in NSMicrophoneUsageDescription NSCameraUsageDescription CFBundleURLTypes NSAppTransportSecurity; do
+            if plutil -extract "$key" json -o /dev/null "$info" 2>/dev/null; then
+              echo "Unexpected Info.plist key: $key"
+              exit 1
+            fi
+          done
+          node --input-type=commonjs -e '
+            const assert = require("node:assert/strict");
+            const fs = require("node:fs");
+            const binary = fs.readFileSync(process.argv[1]);
+            assert.ok(binary.includes(Buffer.from("/api/ios/guest/status")));
+            for (const marker of ["AVAudioRecorder", "requestRecordPermission", "CaptureHTTPProcessor", "x-phrabit-preview-pass"]) {
+              assert.ok(!binary.includes(Buffer.from(marker)), "Unexpected binary marker: " + marker);
+            }
+            console.log("Unsigned device app has the status URL rule, no capture code, and no short-pass handling.");
+          ' "$app/PhrabitGuestConnection"

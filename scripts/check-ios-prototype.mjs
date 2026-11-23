@@ -53,6 +53,7 @@ const checks = [
   ["default application remains offline; dormant client has no embedded credentials or origin", () => {
     const swiftSources = listFiles(prototypeRoot)
       .filter((file) => file.endsWith(".swift") && path.basename(file) !== "Package.swift" && !file.includes(`${path.sep}Tests${path.sep}`))
+      .filter((file) => !["GuestConnection", "GuestConnectionTests"].includes(path.relative(prototypeRoot, file).split(path.sep)[0]))
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
     assert.doesNotMatch(swiftSources, /https?:\/\/|GEMINI_API_KEY|OPENAI_API_KEY|SUPABASE|import Speech|FoundationModels/);
@@ -347,6 +348,22 @@ const checks = [
     const unsignedWorkflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
     assert.match(unsignedWorkflow, /inputs\.compile_translation_home[\s\S]*?PHRABIT_OFFLINE_TRANSLATION_HOME[\s\S]*?CODE_SIGNING_ALLOWED=NO/);
     assert.match(unsignedWorkflow, /inputs\.compile_guest_home[\s\S]*?guestUnsignedSpec\(\)[\s\S]*?-configuration Release[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?PhrabitOfflineGuestTestFlight/);
+  }],
+  ["guest connection uses an isolated unsigned target and accepts only the status URL", () => {
+    const spec = read("guest-connection.yml");
+    assert.deepEqual(readdirSync(path.join(prototypeRoot, "GuestConnection")).sort(), [
+      "GuestConnectionURL.swift", "PhrabitGuestConnectionApp.swift"
+    ]);
+    const app = read("GuestConnection/PhrabitGuestConnectionApp.swift");
+    const url = read("GuestConnection/GuestConnectionURL.swift");
+    assert.doesNotMatch(read("project.yml"), /GuestConnection/);
+    assert.match(spec, /sources:\s+- GuestConnection\s+- path: App\/Assets\.xcassets\s+buildPhase: resources/);
+    assert.match(spec, /CODE_SIGNING_ALLOWED: "NO"/);
+    assert.doesNotMatch(spec, /include:|packages:|NSMicrophoneUsageDescription|CFBundleURLTypes|entitlements:/);
+    assert.match(app, /openURL\(url\)/);
+    assert.doesNotMatch(app, /AVAudio|URLSession|UserDefaults|Keychain|shortPass|https?:\/\//i);
+    assert.match(url, /phrabit-ios-guest-preview-.*\/api\/ios\/guest\/status/);
+    assert.equal((url.match(/https:\/\//g) ?? []).length, 1);
   }],
   ["offline prototype privacy declarations match the native APIs", () => {
     const applicationPrivacy = read("App/PrivacyInfo.xcprivacy");
