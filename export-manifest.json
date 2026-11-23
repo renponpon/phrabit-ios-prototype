@@ -209,8 +209,8 @@
     },
     {
       "path": ".github/workflows/ios-testflight.yml",
-      "bytes": 7587,
-      "sha256": "1b7d3cb35b78b466d2a46f94ace78da3fd3cb1be29c45e3a400bffd3ebdae01d"
+      "bytes": 7932,
+      "sha256": "8d36c7cc07fee725b0cebab4f1d30ffddf838631d56e98fed485071fe807173e"
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
@@ -234,13 +234,13 @@
     },
     {
       "path": "scripts/ios-testflight.mjs",
-      "bytes": 38627,
-      "sha256": "90100f817748834782633c7f6548b6465957740b139fd7c098d1e2a835cc1dea"
+      "bytes": 45260,
+      "sha256": "338a5768ed41ba58cdbaaa191d5e45cb77a7306486ed6e157b83efc68994a0dc"
     },
     {
       "path": "scripts/ios-testflight.test.mjs",
-      "bytes": 30744,
-      "sha256": "e291f974bf25a4d86fa7f1e01eb8f713bc9be4bc0f3b34082948284940f21331"
+      "bytes": 34357,
+      "sha256": "2f64009dcc92d7b6ca15b7be0ee1d592896d4ea95a3542c2488e64ddafa5f971"
     },
     {
       "path": "public/icons/icon-512.png",

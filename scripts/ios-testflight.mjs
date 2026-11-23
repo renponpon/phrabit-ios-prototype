@@ -13,6 +13,9 @@ const translationHomePilotFlag = 'PHRABIT_PREVIEW_TRANSLATION_HOME';
 const translationHomePilotMarker = 'PhrabitPreviewTranslationHome';
 const audioPilotMicrophoneDescription = '本人限定の音声翻訳テストに使います。「停止して翻訳」を押したときだけ録音をOpenAIへ、認識した文章をGoogle Geminiへ送信します。';
 const offlineGuestVariant = 'guest-home';
+const connectionVariant = 'guest-connection';
+const connectionTarget = 'PhrabitGuestConnection';
+const connectionMarker = 'PhrabitGuestConnectionOnly';
 const offlineBuilds = new Map([
   ['startup-timing', {
     flag: 'PHRABIT_OFFLINE_STARTUP_TIMING',
@@ -62,8 +65,8 @@ function assertAudioPilotVariant(variant, active) {
 
 export function offlineInternalVariant(environment) {
   const variant = environment.IOS_OFFLINE_INTERNAL_VARIANT ?? 'none';
-  assert.equal(environment.IOS_GUEST_NO_AUTO_DISTRIBUTION ?? 'false', String(variant === offlineGuestVariant), 'Guest TestFlight requires its own automatic distribution check');
-  if (!offlineBuild(variant)) return variant;
+  assert.equal(environment.IOS_GUEST_NO_AUTO_DISTRIBUTION ?? 'false', String([offlineGuestVariant, connectionVariant].includes(variant)), 'Guest TestFlight requires its own automatic distribution check');
+  if (variant !== connectionVariant && !offlineBuild(variant)) return variant;
   for (const other of ['IOS_PREVIEW_AUTH_ONLY', 'IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
     assert.equal(environment[other] ?? 'false', 'false', 'Offline internal builds exclude Preview modes');
   }
@@ -117,10 +120,11 @@ export function previewAuthPrivacyCategories(settings) {
 export function assertTestFlightUploadAllowed(state, requestedPilotVariant, requestedOfflineVariant = 'none') {
   const pilotSubmission = requestedPilotVariant !== 'none';
   assertAudioPilotVariant(requestedPilotVariant, pilotSubmission);
-  if (offlineBuild(requestedOfflineVariant)) {
+  if (requestedOfflineVariant === connectionVariant || offlineBuild(requestedOfflineVariant)) {
     assert.ok(!pilotSubmission, 'Upload modes are exclusive');
     assert.ok(state.offlineInternalVariant === requestedOfflineVariant && state.previewAuthOnly === false &&
       state.audioPilotMode === null && state.audioPilotVariant === 'none' && state.offlineInspectionPassed === true, 'Offline upload requires an exact variant match and a completed offline binary check');
+    if (requestedOfflineVariant === connectionVariant) assert.equal(state.connectionInspectionPassed, true, 'Connection upload requires the standalone signed app inspection');
     return;
   }
   assert.equal(state.offlineInternalVariant ?? 'none', 'none', 'Offline builds require their separate internal upload stage');
@@ -219,6 +223,57 @@ export function guestUnsignedSpec() {
   };
 }
 
+export function guestConnectionDistributionSpec(teamId, appUuid, buildNumber) {
+  assert.match(teamId, /^[A-Z0-9]{10}$/);
+  assert.match(appUuid, /^[A-F0-9-]{36}$/i);
+  assert.match(buildNumber, /^[1-9]\d{0,3}\.[1-9]\d{0,3}$/);
+  return {
+    include: ['guest-connection.yml'],
+    targets: {
+      [connectionTarget]: {
+        settings: { configs: { Release: {
+          CODE_SIGNING_ALLOWED: 'YES',
+          CODE_SIGNING_REQUIRED: 'YES',
+          CODE_SIGN_STYLE: 'Manual',
+          CODE_SIGN_IDENTITY: 'Apple Distribution',
+          'CODE_SIGN_IDENTITY[sdk=iphoneos*]': 'Apple Distribution',
+          DEVELOPMENT_TEAM: teamId,
+          PROVISIONING_PROFILE_SPECIFIER: appUuid,
+          CURRENT_PROJECT_VERSION: buildNumber,
+          SKIP_INSTALL: 'NO'
+        } } },
+        info: { properties: {
+          [connectionMarker]: true,
+          CFBundleVersion: '$(CURRENT_PROJECT_VERSION)',
+          CFBundleShortVersionString: '$(MARKETING_VERSION)'
+        } }
+      }
+    }
+  };
+}
+
+export function assertGuestConnectionBundle(info, executable, buildNumber) {
+  assert.equal(info.CFBundleIdentifier, 'com.phrabit.app');
+  assert.equal(info.CFBundleExecutable, connectionTarget);
+  assert.equal(info.CFBundleVersion, buildNumber);
+  assert.equal(info.CFBundleShortVersionString, '0.1.0');
+  assert.equal(info[connectionMarker], true);
+  for (const key of [
+    'ITSAppUsesNonExemptEncryption', 'ITSEncryptionExportComplianceCode', 'NSMicrophoneUsageDescription',
+    'NSCameraUsageDescription', 'NSSpeechRecognitionUsageDescription', 'CFBundleURLTypes', 'NSAppTransportSecurity',
+    'UIBackgroundModes', 'PhrabitPreviewAuthOnly', 'PhrabitDiagnosticsOnly', translationHomePilotMarker,
+    ...Array.from(offlineBuilds.values(), ({ marker }) => marker)
+  ]) {
+    assert.ok(!Object.hasOwn(info, key), `Unexpected connection bundle key: ${key}`);
+  }
+  for (const marker of ['phrabit-ios-guest-preview-', '/api/ios/guest/status']) {
+    assert.ok(executable.includes(marker), 'Missing isolated Preview status URL rule');
+  }
+  for (const marker of ['AVAudioRecorder', 'requestRecordPermission', 'CaptureHTTPProcessor', 'URLSession', 'supabase.co', 'x-phrabit-preview-pass']) {
+    assert.ok(!executable.includes(marker), `Unexpected connection executable marker: ${marker}`);
+  }
+}
+
 export function classifyCommandFailure(output) {
   const appleCode = output.match(/\bITMS-\d{5}\b/);
   if (appleCode) return appleCode[0];
@@ -237,8 +292,9 @@ export function classifyCommandFailure(output) {
 }
 
 export function targetSettingsArguments(target) {
-  assert.ok(['PhrabitCapture', 'PhrabitCaptureControl'].includes(target));
-  return ['-project', 'PhrabitCapture.xcodeproj', '-target', target, '-configuration', 'Release', '-sdk', 'iphoneos', '-showBuildSettings', '-json'];
+  assert.ok(['PhrabitCapture', 'PhrabitCaptureControl', connectionTarget].includes(target));
+  const project = target === connectionTarget ? connectionTarget : 'PhrabitCapture';
+  return ['-project', `${project}.xcodeproj`, '-target', target, '-configuration', 'Release', '-sdk', 'iphoneos', '-showBuildSettings', '-json'];
 }
 
 function main(stage) {
@@ -262,6 +318,21 @@ function main(stage) {
   const requireSecret = (name) => {
     assert.ok(environment[name], `Missing ${name}`);
     return environment[name];
+  };
+  const exportArchive = (archivePath) => {
+    const exportPath = path.join(privateRoot, 'export');
+    run('xcodebuild', ['-exportArchive', '-archivePath', archivePath, '-exportPath', exportPath, '-exportOptionsPlist', path.join(privateRoot, 'ExportOptions.plist')], 'ipa-export');
+    const packages = readdirSync(exportPath).filter((filename) => filename.endsWith('.ipa'));
+    assert.equal(packages.length, 1);
+    return path.join(exportPath, packages[0]);
+  };
+  const assertInternalExport = (requiresLocalExport) => {
+    const help = spawnSync('xcodebuild', ['-help'], { cwd: prototype, encoding: 'utf8' });
+    assert.match(`${help.stdout ?? ''}\n${help.stderr ?? ''}`, /\btestFlightInternalTestingOnly\b/);
+    const options = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(privateRoot, 'ExportOptions.plist')], 'preview-export-settings'));
+    assert.equal(options.testFlightInternalTestingOnly, true, 'The build must be internal only');
+    if (requiresLocalExport) assert.equal(options.destination, 'export', 'The archive must be exported locally before any submission');
+    return options;
   };
 
   if (stage === 'cleanup') {
@@ -288,7 +359,8 @@ function main(stage) {
   validateExecution(environment);
   if (stage === 'prepare') {
     const offlineVariant = offlineInternalVariant(environment);
-    const offline = offlineBuild(offlineVariant);
+    const connectionOnly = offlineVariant === connectionVariant;
+    const offline = connectionOnly || Boolean(offlineBuild(offlineVariant));
     const previewSettings = previewAuthSettings(environment);
     const pilotMode = audioPilotMode(environment);
     const pilotVariant = environment.IOS_AUDIO_PILOT_VARIANT ?? 'none';
@@ -299,7 +371,9 @@ function main(stage) {
     const certificatePath = path.join(privateRoot, 'certificate.p12');
     writePrivate(certificatePath, Buffer.from(requireSecret('IOS_SIGNING_CERTIFICATE_BASE64'), 'base64'));
     const profiles = [];
-    for (const [secretName, bundleId] of [['IOS_APP_PROFILE_BASE64', 'com.phrabit.app'], ['IOS_CONTROL_PROFILE_BASE64', 'com.phrabit.app.control']]) {
+    const requiredProfiles = [['IOS_APP_PROFILE_BASE64', 'com.phrabit.app']];
+    if (!connectionOnly) requiredProfiles.push(['IOS_CONTROL_PROFILE_BASE64', 'com.phrabit.app.control']);
+    for (const [secretName, bundleId] of requiredProfiles) {
       const profilePath = path.join(privateRoot, `${secretName}.mobileprovision`);
       writePrivate(profilePath, Buffer.from(requireSecret(secretName), 'base64'));
       const xmlPath = path.join(privateRoot, `${secretName}.plist`);
@@ -341,22 +415,64 @@ function main(stage) {
     assert.match(identities, /1 valid identities found/, 'Exactly one valid distribution identity is required');
     state.buildNumber = `${environment.GITHUB_RUN_NUMBER}.${environment.GITHUB_RUN_ATTEMPT}`;
     state.teamId = requireSecret('APPLE_TEAM_ID');
-    state.profileUuids = { PhrabitCapture: profiles[0].UUID, PhrabitCaptureControl: profiles[1].UUID };
+    state.profileUuids = connectionOnly ? { [connectionTarget]: profiles[0].UUID }
+      : { PhrabitCapture: profiles[0].UUID, PhrabitCaptureControl: profiles[1].UUID };
     state.previewAuthOnly = Boolean(previewSettings);
     state.audioPilotMode = pilotMode;
     state.audioPilotVariant = pilotVariant;
     state.offlineInternalVariant = offlineVariant;
-    const spec = distributionSpec(requireSecret('APPLE_TEAM_ID'), profiles[0].UUID, profiles[1].UUID, state.buildNumber, previewSettings, offlineVariant, pilotVariant);
+    const spec = connectionOnly ? guestConnectionDistributionSpec(state.teamId, profiles[0].UUID, state.buildNumber)
+      : distributionSpec(state.teamId, profiles[0].UUID, profiles[1].UUID, state.buildNumber, previewSettings, offlineVariant, pilotVariant);
     writeFileSync(path.join(prototype, 'distribution.json'), JSON.stringify(spec), { mode: 0o600 });
-    const options = { method: 'app-store-connect', teamID: requireSecret('APPLE_TEAM_ID'), signingStyle: 'manual', signingCertificate: 'Apple Distribution', manageAppVersionAndBuildNumber: false, provisioningProfiles: { 'com.phrabit.app': profiles[0].UUID, 'com.phrabit.app.control': profiles[1].UUID } };
+    const provisioningProfiles = Object.fromEntries(requiredProfiles.map(([, bundleId], index) => [bundleId, profiles[index].UUID]));
+    const options = { method: 'app-store-connect', teamID: state.teamId, signingStyle: 'manual', signingCertificate: 'Apple Distribution', manageAppVersionAndBuildNumber: false, provisioningProfiles };
     if (previewSettings || offline) options.testFlightInternalTestingOnly = true;
     if (pilotMode || offline) options.destination = 'export';
     writePrivate(path.join(privateRoot, 'export.json'), JSON.stringify(options));
     run('plutil', ['-convert', 'xml1', '-o', path.join(privateRoot, 'ExportOptions.plist'), path.join(privateRoot, 'export.json')], 'export-options');
     saveState(state);
-    console.log('Signing material imported into an ephemeral keychain; both target profiles validated.');
+    console.log(`Signing material imported into an ephemeral keychain; ${profiles.length} target profiles validated.`);
   } else if (stage === 'build') {
     const state = readState();
+    if (state.offlineInternalVariant === connectionVariant) {
+      assert.ok(state.previewAuthOnly === false && state.audioPilotMode === null && state.audioPilotVariant === 'none');
+      const appUuid = state.profileUuids[connectionTarget];
+      assert.deepEqual(state.profileUuids, { [connectionTarget]: appUuid });
+      const spec = JSON.parse(readFileSync(path.join(prototype, 'distribution.json'), 'utf8'));
+      assert.deepEqual(spec, guestConnectionDistributionSpec(state.teamId, appUuid, state.buildNumber));
+      assert.match(run('xcodebuild', ['-version'], 'xcode-version'), /^Xcode 26\./);
+      assert.match(run('xcrun', ['--sdk', 'iphoneos', '--show-sdk-version'], 'ios-sdk'), /^26\./);
+      assert.deepEqual(assertInternalExport(true).provisioningProfiles, { 'com.phrabit.app': appUuid });
+      run('xcodegen', ['generate', '--spec', 'distribution.json'], 'connection-project-generate');
+      const settings = JSON.parse(run('xcodebuild', targetSettingsArguments(connectionTarget), 'connection-build-settings'))
+        .find(entry => entry.target === connectionTarget)?.buildSettings;
+      assert.ok(settings, 'Missing standalone connection build settings');
+      assert.equal(settings.PRODUCT_BUNDLE_IDENTIFIER, 'com.phrabit.app');
+      assert.equal(settings.CODE_SIGNING_ALLOWED, 'YES');
+      assert.equal(settings.CODE_SIGN_STYLE, 'Manual');
+      assert.equal(settings.CODE_SIGN_IDENTITY, 'Apple Distribution');
+      assert.ok(settings.DEVELOPMENT_TEAM === state.teamId && settings.PROVISIONING_PROFILE_SPECIFIER === appUuid);
+      assert.equal(settings.CURRENT_PROJECT_VERSION, state.buildNumber);
+      const archivePath = path.join(privateRoot, `${connectionTarget}.xcarchive`);
+      run('xcodebuild', ['-project', `${connectionTarget}.xcodeproj`, '-scheme', connectionTarget, '-configuration', 'Release',
+        '-destination', 'generic/platform=iOS', '-archivePath', archivePath, '-derivedDataPath', path.join(privateRoot, 'DerivedData'),
+        `OTHER_CODE_SIGN_FLAGS=--keychain ${keychainPath}`, 'archive'], 'connection-archive');
+      const appPath = path.join(archivePath, 'Products/Applications', `${connectionTarget}.app`);
+      const executablePath = path.join(appPath, connectionTarget);
+      assert.ok(!existsSync(path.join(appPath, 'PlugIns')), 'The standalone app must not contain extensions');
+      const info = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(appPath, 'Info.plist')], 'connection-bundle-info'));
+      assertGuestConnectionBundle(info, readFileSync(executablePath), state.buildNumber);
+      run('codesign', ['--verify', '--strict', appPath], 'connection-signature');
+      const links = run('xcrun', ['otool', '-L', executablePath], 'connection-links');
+      const symbols = run('xcrun', ['nm', '-m', executablePath], 'connection-symbols');
+      inspectEncryptionEvidence(links, symbols);
+      state.ipaPath = exportArchive(archivePath);
+      state.offlineInspectionPassed = true;
+      state.connectionInspectionPassed = true;
+      saveState(state);
+      console.log(`Signed connection-only build ${state.buildNumber} exported for internal testing. No recording, extension, or export answers embedded.`);
+      return;
+    }
     const infoProperties = JSON.parse(readFileSync(path.join(prototype, 'distribution.json'), 'utf8')).targets.PhrabitCapture.info.properties;
     const settings = infoProperties.PhrabitPreviewAuthOnly;
     const offline = offlineBuild(state.offlineInternalVariant);
@@ -374,12 +490,8 @@ function main(stage) {
     assert.match(run('xcodebuild', ['-version'], 'xcode-version'), /^Xcode 26\./);
     assert.match(run('xcrun', ['--sdk', 'iphoneos', '--show-sdk-version'], 'ios-sdk'), /^26\./);
     if (state.previewAuthOnly || offline) {
-      const help = spawnSync('xcodebuild', ['-help'], { cwd: prototype, encoding: 'utf8' });
-      assert.match(`${help.stdout ?? ''}\n${help.stderr ?? ''}`, /\btestFlightInternalTestingOnly\b/);
       if (state.previewAuthOnly) run('plutil', ['-replace', 'NSPrivacyCollectedDataTypes', '-json', JSON.stringify(previewAuthPrivacyCategories(settings)), 'App/PrivacyInfo.xcprivacy'], 'preview-auth-privacy');
-      const exportOptions = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(privateRoot, 'ExportOptions.plist')], 'preview-export-settings'));
-      assert.equal(exportOptions.testFlightInternalTestingOnly, true, 'The build must be internal only');
-      if (audioPilot || offline) assert.equal(exportOptions.destination, 'export', 'The archive must be exported locally before any submission');
+      assertInternalExport(audioPilot || offline);
     }
     if (offlineStartupTiming) {
       const controlManifest = 'Control/PrivacyInfo.xcprivacy';
@@ -483,10 +595,7 @@ function main(stage) {
       const bundledPrivacy = JSON.parse(run('plutil', ['-extract', 'NSPrivacyCollectedDataTypes', 'json', '-o', '-', path.join(appPath, 'PrivacyInfo.xcprivacy')], 'preview-auth-bundled-privacy'));
       assert.deepEqual(bundledPrivacy, previewAuthPrivacyCategories(settings));
     }
-    const exportPath = path.join(privateRoot, 'export');
-    run('xcodebuild', ['-exportArchive', '-archivePath', archivePath, '-exportPath', exportPath, '-exportOptionsPlist', path.join(privateRoot, 'ExportOptions.plist')], 'ipa-export');
-    const packages = readdirSync(exportPath).filter((filename) => filename.endsWith('.ipa'));
-    assert.equal(packages.length, 1);
+    state.ipaPath = exportArchive(archivePath);
     if (audioPilot) {
       assert.ok(appleCryptoLink, 'Expected iOS cryptographic framework link was not found');
       state.audioPilotInspectionPassed = state.audioPilotVariant;
@@ -496,7 +605,6 @@ function main(stage) {
       state.offlineInspectionPassed = true;
       console.log(`Signed offline ${state.offlineInternalVariant} inspection: internal-only export, locked dependencies, offline settings only, no export answers embedded.`);
     }
-    state.ipaPath = path.join(exportPath, packages[0]);
     saveState(state);
     console.log(`Signed iPhone build ${state.buildNumber} exported; app and control signatures verified.`);
   } else if (stage === 'upload' || stage === 'upload-audio-pilot' || stage === 'upload-offline') {
