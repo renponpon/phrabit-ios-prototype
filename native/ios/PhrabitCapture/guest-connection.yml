@@ -33,6 +33,11 @@ targets:
         CFBundleDisplayName: Phrabit接続検証
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
   PhrabitGuestConnectionTests:
     type: bundle.unit-test
     platform: iOS

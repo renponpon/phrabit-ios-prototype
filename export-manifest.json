@@ -304,8 +304,8 @@
     },
     {
       "path": "native/ios/PhrabitCapture/guest-connection.yml",
-      "bytes": 1434,
-      "sha256": "15c0eb42790ee72b223ccd958e01ee75e75aafeaa2c42263035714738efb0d20"
+      "bytes": 1669,
+      "sha256": "1d5b963beda0da617736f680d6cfb38792b4d44d7b1de923462a4588f0fbe486"
     },
     {
       "path": "native/ios/PhrabitCapture/GuestConnection/GuestConnectionURL.swift",
