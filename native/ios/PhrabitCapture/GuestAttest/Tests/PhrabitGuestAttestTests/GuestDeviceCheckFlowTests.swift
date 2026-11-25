@@ -75,11 +75,12 @@ final class GuestDeviceCheckFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testAnExplicitRetryPreservesTheOldKeyAndReopensWithTheRegisteredReplacement() async throws {
+    func testASecondExplicitRetryPreservesBothKeysAndReopensWithTheRegisteredReplacement() async throws {
         let provider = TestProvider()
         let store = TestKeyStore()
+        let earliestIdentifier = Data(repeating: 0xab, count: 32).base64EncodedString()
         store.key = try JSONDecoder().decode(GuestAttestKey.self, from: Data("""
-        {"identifier":"\(provider.identifier)","phase":"awaitingConfirmation"}
+        {"identifier":"\(provider.identifier)","phase":"awaitingConfirmation","previousIdentifier":"\(earliestIdentifier)"}
         """.utf8))
         let api = TestEndpoint(first: challenge(offset: 45), second: challenge(offset: 60, isConfirmation: true))
         let wire = GuestCheckJSONAPI(exchange: api.send)
@@ -91,6 +92,7 @@ final class GuestDeviceCheckFlowTests: XCTestCase {
         let replacementHash = try await flow.prepareRegistrationRetry()
         XCTAssertEqual(replacementHash, String(repeating: "de", count: 32))
         XCTAssertEqual(store.key?.previousIdentifier, provider.identifier)
+        XCTAssertEqual(store.key?.earliestIdentifier, earliestIdentifier)
         XCTAssertEqual(store.key?.phase, .allocated)
         XCTAssertTrue(api.requests.isEmpty)
 
@@ -101,6 +103,7 @@ final class GuestDeviceCheckFlowTests: XCTestCase {
         try await reopened.confirm()
         XCTAssertEqual(reopenedStore.key?.phase, .registered)
         XCTAssertEqual(reopenedStore.key?.previousIdentifier, provider.identifier)
+        XCTAssertEqual(reopenedStore.key?.earliestIdentifier, earliestIdentifier)
         XCTAssertEqual(provider.attestedKeys, [try XCTUnwrap(provider.nextIdentifier)])
         XCTAssertEqual(provider.assertedKeys, provider.attestedKeys)
         XCTAssertTrue(api.requests.allSatisfy { $0.object["keyHash"] == replacementHash })
@@ -108,7 +111,7 @@ final class GuestDeviceCheckFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testRetryIsUnavailableForRegisteredOrAlreadyRetriedKeys() async throws {
+    func testRetryIsUnavailableForRegisteredKeysOrAfterTwoRetries() async throws {
         let provider = TestProvider()
         let store = TestKeyStore()
         let api = TestEndpoint(first: challenge(offset: 45), second: challenge(offset: 60, isConfirmation: true))
@@ -117,7 +120,8 @@ final class GuestDeviceCheckFlowTests: XCTestCase {
             GuestAttestKey(identifier: provider.identifier, phase: .allocated),
             GuestAttestKey(identifier: provider.identifier, phase: .registered),
             GuestAttestKey(identifier: provider.identifier, phase: .awaitingConfirmation,
-                           previousIdentifier: Data(repeating: 0xde, count: 32).base64EncodedString())
+                           previousIdentifier: Data(repeating: 0xde, count: 32).base64EncodedString(),
+                           earliestIdentifier: Data(repeating: 0xab, count: 32).base64EncodedString())
         ] {
             store.key = saved
             do {

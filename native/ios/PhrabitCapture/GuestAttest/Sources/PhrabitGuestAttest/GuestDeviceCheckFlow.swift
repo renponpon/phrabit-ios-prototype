@@ -14,22 +14,25 @@ struct GuestAttestKey: Codable, Equatable {
     let identifier: String
     var phase: Phase
     let previousIdentifier: String?
+    let earliestIdentifier: String?
 
-    init(identifier: String, phase: Phase, previousIdentifier: String? = nil) {
+    init(identifier: String, phase: Phase, previousIdentifier: String? = nil, earliestIdentifier: String? = nil) {
         self.identifier = identifier
         self.phase = phase
         self.previousIdentifier = previousIdentifier
+        self.earliestIdentifier = earliestIdentifier
     }
 
-    var canPrepareRetry: Bool { phase == .awaitingConfirmation && previousIdentifier == nil }
+    var canPrepareRetry: Bool { phase == .awaitingConfirmation && earliestIdentifier == nil }
 
     func permitsUpdate(to new: Self) -> Bool {
         if identifier == new.identifier {
-            return previousIdentifier == new.previousIdentifier &&
+            return previousIdentifier == new.previousIdentifier && earliestIdentifier == new.earliestIdentifier &&
                 ((phase == .allocated && new.phase == .awaitingConfirmation) ||
                  (phase == .awaitingConfirmation && new.phase == .registered))
         }
-        return canPrepareRetry && new.phase == .allocated && new.previousIdentifier == identifier
+        return canPrepareRetry && new.phase == .allocated && new.previousIdentifier == identifier &&
+            new.earliestIdentifier == previousIdentifier && new.identifier != previousIdentifier
     }
 
     func fingerprint() throws -> String {
@@ -137,9 +140,11 @@ final class GuestDeviceCheckFlow {
         }
         _ = try saved.fingerprint()
         let replacement = GuestAttestKey(identifier: try await provider.generateKey(), phase: .allocated,
-                                         previousIdentifier: saved.identifier)
+                                         previousIdentifier: saved.identifier, earliestIdentifier: saved.previousIdentifier)
         let keyHash = try replacement.fingerprint()
-        guard saved.identifier != replacement.identifier else { throw GuestDeviceCheckError.invalidKey }
+        guard saved.identifier != replacement.identifier, saved.permitsUpdate(to: replacement) else {
+            throw GuestDeviceCheckError.invalidKey
+        }
         try Task.checkCancellation()
         try keyStore.replace(saved, with: replacement)
         return keyHash
