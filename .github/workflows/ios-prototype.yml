@@ -305,3 +305,30 @@ jobs:
             fi
           done
 
+      - name: Test and compile the guest device mock without signing
+        if: ${{ inputs.compile_guest_home }}
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          swift test --package-path GuestAttest --scratch-path "$RUNNER_TEMP/phrabit-guest-device-mock-tests"
+          xcodegen generate --spec guest-preview.yml
+          mkdir -p PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          cp Core/Package.resolved PhrabitCapture.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          xcodebuild \
+            -project PhrabitCapture.xcodeproj \
+            -scheme PhrabitCapture \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/GuestDeviceMockDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -onlyUsePackageVersionsFromResolvedFile \
+            build
+          app=build/GuestDeviceMockDerivedData/Build/Products/Debug-iphoneos/PhrabitCapture.app
+          control="$app/PlugIns/PhrabitCaptureControl.appex"
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$app/Info.plist")" = com.phrabit.app.guestpreview
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$control/Info.plist")" = com.phrabit.app.guestpreview.control
+          for bundle in "$app" "$control"; do
+            test ! -e "$bundle/embedded.mobileprovision"
+            test ! -d "$bundle/_CodeSignature"
+            if plutil -extract PhrabitPreviewAuthOnly json -o /dev/null "$bundle/Info.plist" 2>/dev/null; then exit 1; fi
+          done
