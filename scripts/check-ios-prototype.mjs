@@ -278,7 +278,15 @@ const checks = [
     assert.match(workflow, /Verify unsigned iPhone archive identifiers and privacy/);
     assert.match(workflow, /UISupportedInterfaceOrientations json/);
     assert.match(workflow, /All interface orientations must be supported/);
-    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 6);
+    const mockStep = workflow.split(/\r?\n      - name: Test and compile the guest device mock without signing\r?\n/)[1]
+      ?.split(/\r?\n      - name: /)[0];
+    assert.ok(mockStep, "unsigned guest device mock step must be present");
+    assert.match(mockStep, /if: \$\{\{ inputs\.compile_guest_home \}\}/);
+    assert.match(mockStep, /swift test --package-path GuestAttest/);
+    assert.match(mockStep, /xcodegen generate --spec guest-preview\.yml[\s\S]*?-configuration Debug[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?CODE_SIGNING_REQUIRED=NO/);
+    assert.match(mockStep, /Debug-iphoneos\/PhrabitCapture\.app/);
+    assert.doesNotMatch(mockStep, /\b(?:upload|exportArchive|altool)\b/i);
+    assert.equal((workflow.match(/CODE_SIGNING_ALLOWED=NO/g) ?? []).length, 7);
     assert.doesNotMatch(workflow, /^\s+(push|pull_request|schedule):/m);
     assert.doesNotMatch(workflow, /secrets\.|upload_to_testflight|app-store-connect|vercel|curl|\.env/);
     assert.doesNotMatch(workflow, /upload-artifact|actions\/cache/);
