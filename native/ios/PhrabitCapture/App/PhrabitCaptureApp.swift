@@ -5,6 +5,9 @@ import PhrabitCaptureCore
 #if PHRABIT_OFFLINE_GUEST_TESTFLIGHT && (PHRABIT_LOCAL_LIVE_AUDIO || PHRABIT_PREVIEW_TRANSLATION_HOME || PHRABIT_OFFLINE_STARTUP_TIMING || PHRABIT_OFFLINE_TRANSLATION_HOME || PHRABIT_OFFLINE_GUEST_HOME)
 #error("The guest TestFlight build cannot include other capture variants.")
 #endif
+#if PHRABIT_GUEST_DEVICE_MOCK && (!DEBUG || !PHRABIT_OFFLINE_GUEST_HOME || PHRABIT_OFFLINE_GUEST_TESTFLIGHT || PHRABIT_LOCAL_LIVE_AUDIO || PHRABIT_PREVIEW_TRANSLATION_HOME)
+#error("The guest device mock requires the isolated, offline Debug build.")
+#endif
 
 @main
 @MainActor

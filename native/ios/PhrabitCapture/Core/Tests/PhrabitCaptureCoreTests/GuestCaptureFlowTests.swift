@@ -33,6 +33,19 @@ final class GuestCaptureFlowTests: XCTestCase {
         }
     }
 
+    func testPreflightDoesNotConsumeQuotaAndStopsDuplicatesBeforeCheckingTheDevice() throws {
+        let request = UUID()
+        var fixture = GuestCaptureFixture(response: GuestQuotaSnapshot(remaining: 2, nextReset: reset))
+        try fixture.checkAvailable(request)
+        XCTAssertEqual(fixture.quota.remaining, 2)
+        try fixture.attempt(request)
+        XCTAssertThrowsError(try fixture.checkAvailable(request)) { XCTAssertTrue($0 is CancellationError) }
+        XCTAssertEqual(fixture.quota.remaining, 1)
+        let blocked = GuestCaptureFixture(response: fixture.quota, issue: .serviceBudget)
+        XCTAssertThrowsError(try blocked.checkAvailable(UUID())) { XCTAssertEqual($0 as? GuestCaptureFeedback, .serviceBudget) }
+        XCTAssertEqual(blocked.quota.remaining, 1)
+    }
+
     func testPostDispatchFailureConsumesQuotaOnce() {
         let requestID = UUID()
         var fixture = GuestCaptureFixture(response: GuestQuotaSnapshot(remaining: 2, nextReset: reset), issue: .provider)

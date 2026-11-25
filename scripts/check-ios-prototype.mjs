@@ -381,6 +381,28 @@ const checks = [
     assert.match(unsignedWorkflow, /inputs\.compile_translation_home[\s\S]*?PHRABIT_OFFLINE_TRANSLATION_HOME[\s\S]*?CODE_SIGNING_ALLOWED=NO/);
     assert.match(unsignedWorkflow, /inputs\.compile_guest_home[\s\S]*?guestUnsignedSpec\(\)[\s\S]*?-configuration Release[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?PhrabitOfflineGuestTestFlight/);
   }],
+  ["guest device checks on the translation home are local and opt-in after stop", () => {
+    const overlay = read("guest-preview.yml");
+    const guest = read("App/GuestCaptureHomeView.swift");
+    const model = read("App/CaptureViewModel.swift");
+    const device = read("GuestAttest/Sources/PhrabitGuestAttest/GuestMockDeviceCheck.swift");
+    const app = read("App/PhrabitCaptureApp.swift");
+    assert.deepEqual([...overlay.matchAll(/- GuestAttest\/Sources\/PhrabitGuestAttest\/(\w+\.swift)/g)].map(match => match[1]), [
+      "GuestDeviceCheckFlow.swift", "GuestCheckJSONAPI.swift", "GuestMockDeviceCheck.swift",
+    ]);
+    assert.match(overlay, /Debug:[\s\S]*?PHRABIT_OFFLINE_GUEST_HOME PHRABIT_GUEST_DEVICE_MOCK/);
+    assert.doesNotMatch(read("project.yml"), /PhrabitGuestAttest|PHRABIT_GUEST_DEVICE_MOCK/);
+    assert.match(app, /PHRABIT_GUEST_DEVICE_MOCK && \(!DEBUG \|\| !PHRABIT_OFFLINE_GUEST_HOME[^\n]+\n#error/);
+    assert.doesNotMatch(readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8"), /guest-preview\.yml|PHRABIT_GUEST_DEVICE_MOCK/);
+    assert.match(guest, /#if DEBUG && PHRABIT_GUEST_DEVICE_MOCK\s+try fixture\.checkAvailable\(sessionID\)[\s\S]*?try await deviceCheck\.verifyBeforeMockTranslation\(\)[\s\S]*?try Task\.checkCancellation\(\)\s+#endif\s+try fixture\.attempt\(sessionID\)/);
+    assert.equal((guest.match(/deviceCheck\.verifyBeforeMockTranslation\(/g) ?? []).length, 1);
+    assert.match(model, /self\.recorder\.discard\(recordingURL\)\s+audio = Data\(\)[\s\S]*?processor\.transcribe/);
+    assert.match(device, /^#if DEBUG[\s\S]*?GuestCheckJSONAPI\(exchange: device\.exchange\)/);
+    assert.match(device, /isValidSignature\(signature, for: digest\)[\s\S]*?self\.pending = nil/);
+    assert.doesNotMatch(device, /https?:|URLSession|URLRequest|DCAppAttestService|Keychain|[Pp]asteboard|CaptureHTTPProcessor/);
+    const deviceWorkflow = readFileSync(path.join(root, ".github/workflows/ios-guest-device-check.yml"), "utf8");
+    assert.match(deviceWorkflow, /working-directory: native\/ios\/PhrabitCapture\/GuestAttest[\s\S]*?swift test --scratch-path/);
+  }],
   ["guest connection uses an isolated unsigned target and accepts only the status URL", () => {
     const spec = read("guest-connection.yml");
     assert.deepEqual(readdirSync(path.join(prototypeRoot, "GuestConnection")).sort(), [

@@ -2,13 +2,13 @@
 
 ## ゲスト向け初回設定の試作（Debug限定）
 
-Macでこの候補の `native/ios/PhrabitCapture` から `xcodegen generate --spec guest-preview.yml` を実行すると、ゲスト画面のDebug構成を生成できます。署名なしのコンパイル確認は `xcodebuild -scheme PhrabitCapture -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`。アプリとコントロールのDebug識別子は既存と分けています。既存の未署名ワークフローで `compile_translation_home` を選ぶと、従来の起動画面を変更せず、ゲスト画面のSwiftUIもコンパイルします。通常構成や署名ワークフローではこの画面を選びません。
+Macでこの候補の `native/ios/PhrabitCapture` から `xcodegen generate --spec guest-preview.yml` を実行すると、ゲスト画面のDebug構成を生成できます。署名なしのコンパイル確認は `xcodebuild -scheme PhrabitCapture -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`。アプリとコントロールのDebug識別子は既存と分けています。模擬端末確認だけは `swift test --package-path GuestAttest` または既存の「iOS guest device check - unsigned」でテストできます。通常構成や署名ワークフローではこの画面を選びません。
 
-同意前の無送信見本、マイク許可／拒否、ロック画面の手動追加と後回し、録音キャンセルを確認します。許可後の録音は端末内だけで15秒まで。英語・中国語の表示は固定見本です。設定の「模擬応答」で、日次枠・全体枠・通信切れ・端末確認・短時間制限・送信後失敗を選べます。残り回数と更新時刻はローカルの模擬値です。実API、ログイン、App Attest、実際の台帳には接続しません。
+同意前の無送信見本、マイク許可／拒否、ロック画面の手動追加と後回し、録音キャンセルを確認します。許可後の録音は端末内だけで15秒まで。「停止して翻訳」で録音を破棄してから、メモリ内だけで模擬キーの登録・単回チャレンジに対する署名確認を行います。コピペ・ログインなしで、英語または中国語とピンインの固定見本を表示します。設定の「模擬応答」で、日次枠・全体枠・通信切れ・端末確認・短時間制限・送信後失敗を選べます。残り回数と更新時刻はローカルの模擬値です。実API、実際のApp Attest、端末キー、実際の台帳には接続しません。
 
 ## ゲスト向け実機確認（本人限定TestFlight）
 
-未署名ワークフローで `compile_guest_home` を指定すると、署名用と同じ構成のReleaseを、鍵なしで作ります。本体とロック画面拡張のゲスト用マーカー、接続設定・認証用URL・署名の不在を確認します。上記のDebug試作は別の識別子のままです。
+未署名ワークフローで `compile_guest_home` を指定すると、署名用と同じ構成のReleaseを、鍵なしで作ります。本体とロック画面拡張のゲスト用マーカー、接続設定・認証用URL・署名の不在を確認します。上記のDebug試作の結合コンパイルは別で行います。
 
 配布を承認された場合だけ、保護された署名ワークフローで `guest-home` を明示します。既存の本人グループだけ、自動配布なしを事前照合して確認入力を有効にし、検証済みのmainコミットを指定します。既存PhrabitのIDを利用するため、TestFlightで更新すると端末上の現行版に代わります。署名前の検証を通し、Appleが追加の申告を求めた場合は回答せず、本人の対応後に配布します。
 

@@ -2,11 +2,15 @@ include:
   - project.yml
 targets:
   PhrabitCapture:
+    sources:
+      - GuestAttest/Sources/PhrabitGuestAttest/GuestDeviceCheckFlow.swift
+      - GuestAttest/Sources/PhrabitGuestAttest/GuestCheckJSONAPI.swift
+      - GuestAttest/Sources/PhrabitGuestAttest/GuestMockDeviceCheck.swift
     settings:
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.app.guestpreview
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) PHRABIT_OFFLINE_GUEST_HOME'
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) PHRABIT_OFFLINE_GUEST_HOME PHRABIT_GUEST_DEVICE_MOCK'
     info:
       properties:
         CFBundleDisplayName: Phrabit画面試作

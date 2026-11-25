@@ -24,6 +24,9 @@ private final class GuestPreviewProcessor: ObservableObject, CaptureProcessing {
     let sendsAudio = false
     @Published private(set) var fixture: GuestCaptureFixture
     @Published private(set) var feedback: GuestCaptureFeedback?
+    #if DEBUG && PHRABIT_GUEST_DEVICE_MOCK
+    private let deviceCheck = GuestMockDeviceCheck()
+    #endif
 
     init() { fixture = Self.makeFixture(issue: nil) }
 
@@ -53,6 +56,17 @@ private final class GuestPreviewProcessor: ObservableObject, CaptureProcessing {
         try Task.checkCancellation()
         guard audio.isEmpty else { throw CaptureClientError.invalidInput }
         do {
+            #if DEBUG && PHRABIT_GUEST_DEVICE_MOCK
+            try fixture.checkAvailable(sessionID)
+            do {
+                try await deviceCheck.verifyBeforeMockTranslation()
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                throw GuestCaptureFeedback.deviceCheck
+            }
+            try Task.checkCancellation()
+            #endif
             try fixture.attempt(sessionID)
         } catch let issue as GuestCaptureFeedback {
             feedback = issue
@@ -106,9 +120,15 @@ struct GuestCaptureHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 17) {
+                    #if DEBUG && PHRABIT_GUEST_DEVICE_MOCK
+                    Text("端末確認・翻訳は模擬 · 外部に送信しません")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
+                    #else
                     Text("試作 · 外部に送信しません")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tint)
+                    #endif
                     if let step { setupView(step) } else { captureView }
                 }
                 .padding(20)
@@ -244,7 +264,11 @@ struct GuestCaptureHomeView: View {
                 primary("停止して翻訳", action: model.stopAndTranslate)
                 Button("キャンセル", action: model.cancel)
             case .recognizing, .translating:
+                #if DEBUG && PHRABIT_GUEST_DEVICE_MOCK
+                ProgressView("端末確認と翻訳を模擬検証しています")
+                #else
                 ProgressView("見本を表示しています")
+                #endif
                 Button("キャンセル", action: model.cancel)
             case .result(let translation):
                 result(translation, title: "訳文の見本")

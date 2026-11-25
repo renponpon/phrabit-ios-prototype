@@ -51,10 +51,14 @@ public struct GuestCaptureFixture: Sendable {
         simulatedIssue = issue
     }
 
-    public mutating func attempt(_ id: UUID) throws {
+    public func checkAvailable(_ id: UUID) throws {
         guard !submitted.contains(id) else { throw CancellationError() }
         if quota.remaining == 0 { throw GuestCaptureFeedback.daily }
         if let simulatedIssue, !simulatedIssue.consumesAttempt { throw simulatedIssue }
+    }
+
+    public mutating func attempt(_ id: UUID) throws {
+        try checkAvailable(id)
         submitted.insert(id)
         quota = GuestQuotaSnapshot(remaining: quota.remaining - 1, nextReset: quota.nextReset)
         if let simulatedIssue { throw simulatedIssue }
