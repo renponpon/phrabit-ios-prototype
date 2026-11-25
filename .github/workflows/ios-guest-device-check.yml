@@ -91,3 +91,26 @@ jobs:
           for key in NSMicrophoneUsageDescription NSCameraUsageDescription UIBackgroundModes NSAppTransportSecurity CFBundleURLTypes; do
             if plutil -extract "$key" json -o /dev/null "$info" 2>/dev/null; then exit 1; fi
           done
+      - name: Validate the device confirmation Release overlay without signing
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          set -euo pipefail
+          node --input-type=module -e 'import { guestDeviceInAppUnsignedReleaseSpec } from "../../../scripts/ios-testflight.mjs"; process.stdout.write(JSON.stringify(guestDeviceInAppUnsignedReleaseSpec()))' > guest-device-in-app-release-check.json
+          xcodegen generate --spec guest-device-in-app-release-check.json
+          derived="$RUNNER_TEMP/phrabit-guest-device-in-app-release"
+          xcodebuild -project PhrabitGuestDeviceInApp.xcodeproj -scheme PhrabitGuestDeviceInApp \
+            -configuration Release -destination 'generic/platform=iOS' -derivedDataPath "$derived" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+          app="$derived/Build/Products/Release-iphoneos/PhrabitGuestDeviceInApp.app"
+          info="$app/Info.plist"
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$info")" = com.phrabit.app
+          test "$(plutil -extract PhrabitGuestDeviceInAppProofOnly raw -o - "$info")" = true
+          test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.devicecheck.appattest-environment' Generated/GuestDeviceInApp.entitlements)" = production
+          test -f "$app/Assets.car"
+          test ! -d "$app/PlugIns"
+          test ! -d "$app/_CodeSignature"
+          test ! -e "$app/embedded.mobileprovision"
+          for key in NSMicrophoneUsageDescription NSCameraUsageDescription UIBackgroundModes NSAppTransportSecurity CFBundleURLTypes ITSAppUsesNonExemptEncryption ITSEncryptionExportComplianceCode; do
+            if plutil -extract "$key" json -o /dev/null "$info" 2>/dev/null; then exit 1; fi
+          done
+          node --input-type=module -e 'import assert from "node:assert/strict"; import { readFileSync } from "node:fs"; assert.ok(readFileSync(process.argv[1]).includes("requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:"));' "$app/PhrabitGuestDeviceInApp"
