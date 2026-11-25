@@ -53,7 +53,7 @@ const checks = [
   ["default application remains offline; dormant client has no embedded credentials or origin", () => {
     const swiftSources = listFiles(prototypeRoot)
       .filter((file) => file.endsWith(".swift") && path.basename(file) !== "Package.swift" && !file.includes(`${path.sep}Tests${path.sep}`))
-      .filter((file) => !["GuestConnection", "GuestConnectionTests", "GuestAttest"].includes(path.relative(prototypeRoot, file).split(path.sep)[0]))
+      .filter((file) => !["GuestConnection", "GuestConnectionTests", "GuestAttest", "GuestDeviceProbe"].includes(path.relative(prototypeRoot, file).split(path.sep)[0]))
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
     assert.doesNotMatch(swiftSources, /https?:\/\/|GEMINI_API_KEY|OPENAI_API_KEY|SUPABASE|import Speech|FoundationModels/);
@@ -65,7 +65,7 @@ const checks = [
   }],
   ["guest device proof is isolated from all shipping targets and accepts only its three proof routes", () => {
     const signing = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
-    assert.doesNotMatch(read("project.yml") + read("guest-connection.yml") + signing, /GuestAttest|DEVICE_CHECK/);
+    assert.doesNotMatch(read("project.yml") + read("guest-connection.yml") + signing, /GuestAttest|GuestDeviceProbe|DEVICE_CHECK/);
     const source = "GuestAttest/Sources/PhrabitGuestAttest/";
     const api = read(source + "GuestCheckJSONAPI.swift");
     const transport = read(source + "GuestCheckPreviewTransport.swift");
@@ -78,6 +78,20 @@ const checks = [
     assert.match(transport, /completionHandler\(nil\)/);
     assert.match(transport, /x-phrabit-preview-pass/);
     assert.match(transport, /renponpons-projects/);
+  }],
+  ["the standalone probe uses local pasteboard and leaves login in the protected browser", () => {
+    const spec = read("guest-device-probe.yml");
+    const view = read("GuestDeviceProbe/PhrabitGuestDeviceProbeApp.swift");
+    const exchange = read("GuestDeviceProbe/GuestProbeBrowserExchange.swift");
+    assert.match(spec, /CODE_SIGNING_ALLOWED: "NO"/);
+    assert.match(spec, /com\.apple\.developer\.devicecheck\.appattest-environment: production/);
+    assert.match(spec, /excludes:\s+- GuestCheckPreviewTransport.swift/);
+    assert.doesNotMatch(spec, /app-extension|NSMicrophoneUsageDescription|NSCameraUsageDescription/);
+    assert.match(view, /\/api\/ios\/guest\/device-test/);
+    assert.match(view, /\.localOnly: true, \.expirationDate:/);
+    assert.match(view, /PasteButton/);
+    assert.match(exchange, /result.id == pending.id/);
+    assert.doesNotMatch(view + exchange, /AVAudio|AudioRecorder|Speech\b|URLSession|Bearer|x-phrabit-preview-pass/);
   }],
   ["auth uses an exact stable SDK version and keeps configuration outside the default app", () => {
     assert.match(read("Core/Package.swift"), /exact: "2\.55\.7"/);

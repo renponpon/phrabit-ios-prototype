@@ -214,8 +214,8 @@
     },
     {
       "path": "scripts/check-ios-prototype.mjs",
-      "bytes": 31924,
-      "sha256": "3ab8a47ce15ddc6c398df770ede996438632ad583ac98fcd731ed22b8ec0df04"
+      "bytes": 32930,
+      "sha256": "782d70b384b6a3bc7e55b13633b89423801938e659801c58d7e412143138265b"
     },
     {
       "path": "scripts/prepare-ios-cloud-build.mjs",
@@ -324,8 +324,8 @@
     },
     {
       "path": ".github/workflows/ios-guest-device-check.yml",
-      "bytes": 1943,
-      "sha256": "7ff788121a250fcecfb395efa49f90d43c2062db2bc44e49139a75c96867d958"
+      "bytes": 3413,
+      "sha256": "0cb617fd44db1a8c895c0654bbfb84804c6359a8a26573727fba8395e06c983b"
     },
     {
       "path": "native/ios/PhrabitCapture/GuestAttest/Package.swift",
@@ -356,6 +356,21 @@
       "path": "native/ios/PhrabitCapture/GuestAttest/Tests/PhrabitGuestAttestTests/GuestDeviceCheckFlowTests.swift",
       "bytes": 10162,
       "sha256": "bbf8984dfe4951676e87c251ffd9737882c9329b35a88627571aec37a6427819"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/guest-device-probe.yml",
+      "bytes": 1529,
+      "sha256": "a1b541b516d6e2d586a5dfb1dea7adc965e953277a16fa96a59d1b2395c65dcf"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/GuestDeviceProbe/PhrabitGuestDeviceProbeApp.swift",
+      "bytes": 6697,
+      "sha256": "b10f4de8d84f8d80ac31c592637e11dbe5c783b3e7203e63d68e44faeae19ab7"
+    },
+    {
+      "path": "native/ios/PhrabitCapture/GuestDeviceProbe/GuestProbeBrowserExchange.swift",
+      "bytes": 2157,
+      "sha256": "5f30628294761e08ca9bf7e093844de14ab6d434133f7bdefe3f68b913182b07"
     }
   ]
 }

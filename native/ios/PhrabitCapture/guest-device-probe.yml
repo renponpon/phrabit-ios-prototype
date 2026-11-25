@@ -1,0 +1,52 @@
+name: PhrabitGuestDeviceProbe
+options:
+  minimumXcodeGenVersion: 2.44.0
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: ja
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGNING_ALLOWED: "NO"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  PhrabitGuestDeviceProbe:
+    type: application
+    platform: iOS
+    sources:
+      - GuestDeviceProbe
+      - path: GuestAttest/Sources/PhrabitGuestAttest
+        excludes:
+          - GuestCheckPreviewTransport.swift
+      - path: App/Assets.xcassets
+        buildPhase: resources
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.app.guestdeviceprobe
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.app
+    entitlements:
+      path: Generated/GuestDeviceProbe.entitlements
+      properties:
+        com.apple.developer.devicecheck.appattest-environment: production
+    info:
+      path: Generated/GuestDeviceProbe-Info.plist
+      properties:
+        CFBundleDisplayName: Phrabit端末確認
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+schemes:
+  PhrabitGuestDeviceProbe:
+    build:
+      targets:
+        PhrabitGuestDeviceProbe: all
