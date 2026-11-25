@@ -70,3 +70,24 @@ jobs:
               exit 1
             fi
           done
+      - name: Test the in-app confirmation request without a network
+        working-directory: .
+        run: node --test scripts/ios-guest-device-in-app.test.mjs
+      - name: Build and inspect the in-app confirmation candidate without signing
+        working-directory: native/ios/PhrabitCapture
+        run: |
+          set -euo pipefail
+          xcodegen generate --spec guest-device-in-app.yml
+          derived="$RUNNER_TEMP/phrabit-guest-device-in-app-ios"
+          xcodebuild -project PhrabitGuestDeviceInApp.xcodeproj -scheme PhrabitGuestDeviceInApp \
+            -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath "$derived" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+          app="$derived/Build/Products/Debug-iphoneos/PhrabitGuestDeviceInApp.app"
+          info="$app/Info.plist"
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$info")" = com.phrabit.app.guestdeviceinapp
+          test ! -d "$app/PlugIns"
+          test ! -d "$app/_CodeSignature"
+          test ! -e "$app/embedded.mobileprovision"
+          for key in NSMicrophoneUsageDescription NSCameraUsageDescription UIBackgroundModes NSAppTransportSecurity CFBundleURLTypes; do
+            if plutil -extract "$key" json -o /dev/null "$info" 2>/dev/null; then exit 1; fi
+          done
