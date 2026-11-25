@@ -386,6 +386,8 @@ test('device proof uses an isolated signed target and requires the matching insp
 });
 
 test('signed proof-only bundle requires App Attest production and excludes capture and compliance answers', () => {
+  const script = readFileSync(new URL('./ios-testflight.mjs', import.meta.url), 'utf8');
+  assert.match(script, /run\('codesign', \['-d', '--xml', '--entitlements', signedEntitlements, appPath\]/);
   const info = { CFBundleIdentifier: 'com.phrabit.app', CFBundleVersion: '19.1', CFBundleShortVersionString: '0.1.0',
     CFBundleExecutable: 'PhrabitGuestDeviceProbe', PhrabitGuestDeviceProofOnly: true };
   const markers = 'phrabit-ios-guest-preview-/api/ios/guest/device-test,/api/ios/guest/device-check,DCAppAttestService';

@@ -476,7 +476,8 @@ function main(stage) {
         run('codesign', ['--verify', '--strict', appPath], label + '-verify');
         const info = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(appPath, 'Info.plist')], label + '-info'));
         const signedEntitlements = path.join(privateRoot, label + '-entitlements.plist');
-        writePrivate(signedEntitlements, run('codesign', ['-d', '--entitlements', '-', appPath], label + '-entitlements'));
+        run('codesign', ['-d', '--xml', '--entitlements', signedEntitlements, appPath], label + '-entitlements');
+        assert.ok(existsSync(signedEntitlements), 'Signed app does not contain entitlements');
         const entitlements = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', signedEntitlements], label + '-entitlements-plist'));
         assertGuestDeviceProbeBundle(info, readFileSync(path.join(appPath, target)), entitlements, state.teamId, state.buildNumber);
       };
