@@ -1,0 +1,41 @@
+name: PhrabitGuestDeviceInApp
+options:
+  minimumXcodeGenVersion: 2.44.0
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: ja
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGNING_ALLOWED: "NO"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  PhrabitGuestDeviceInApp:
+    type: application
+    platform: iOS
+    sources:
+      - GuestDeviceInApp
+      - GuestAttest/Sources/PhrabitGuestAttest/AppleGuestAttest.swift
+      - GuestAttest/Sources/PhrabitGuestAttest/GuestCheckJSONAPI.swift
+      - GuestAttest/Sources/PhrabitGuestAttest/GuestDeviceCheckFlow.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.phrabit.app.guestdeviceinapp
+    info:
+      path: Generated/GuestDeviceInApp-Info.plist
+      properties:
+        CFBundleDisplayName: Phrabit端末確認試作
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+schemes:
+  PhrabitGuestDeviceInApp:
+    build:
+      targets:
+        PhrabitGuestDeviceInApp: all

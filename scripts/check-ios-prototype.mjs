@@ -53,7 +53,7 @@ const checks = [
   ["default application remains offline; dormant client has no embedded credentials or origin", () => {
     const swiftSources = listFiles(prototypeRoot)
       .filter((file) => file.endsWith(".swift") && path.basename(file) !== "Package.swift" && !file.includes(`${path.sep}Tests${path.sep}`))
-      .filter((file) => !["GuestConnection", "GuestConnectionTests", "GuestAttest", "GuestDeviceProbe"].includes(path.relative(prototypeRoot, file).split(path.sep)[0]))
+      .filter((file) => !["GuestConnection", "GuestConnectionTests", "GuestAttest", "GuestDeviceProbe", "GuestDeviceInApp"].includes(path.relative(prototypeRoot, file).split(path.sep)[0]))
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
     assert.doesNotMatch(swiftSources, /https?:\/\/|GEMINI_API_KEY|OPENAI_API_KEY|SUPABASE|import Speech|FoundationModels/);
@@ -94,6 +94,19 @@ const checks = [
     assert.doesNotMatch(view, /AppStorage|UserDefaults/);
     assert.match(exchange, /result.id == pending.id/);
     assert.doesNotMatch(view + exchange, /AVAudio|AudioRecorder|Speech\b|URLSession|Bearer|x-phrabit-preview-pass/);
+  }],
+  ["in-app device confirmation is unsigned and absent from all shipping targets", () => {
+    const spec = read("guest-device-in-app.yml");
+    const otherSpecs = readdirSync(prototypeRoot).filter(file => file.endsWith(".yml") && file !== "guest-device-in-app.yml");
+    const distribution = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
+    assert.doesNotMatch(otherSpecs.map(read).join("\n") + distribution, /GuestDeviceInApp|guest-device-in-app/i);
+    assert.match(spec, /CODE_SIGNING_ALLOWED: "NO"/);
+    assert.match(spec, /PRODUCT_BUNDLE_IDENTIFIER: com\.phrabit\.app\.guestdeviceinapp/);
+    assert.doesNotMatch(spec, /NS(?:Microphone|Camera)UsageDescription|entitlements:|app-extension|CFBundleURLTypes/);
+    const script = read("GuestDeviceInApp/GuestInAppWebRequest.swift");
+    assert.match(script, /credentials: "same-origin", mode: "same-origin", cache: "no-store", redirect: "error"/);
+    assert.match(script, /payload\?\.purpose !== "device-check"/);
+    assert.doesNotMatch(script, /guest\/(?:register|capture)|x-vercel-protection-bypass/);
   }],
   ["auth uses an exact stable SDK version and keeps configuration outside the default app", () => {
     assert.match(read("Core/Package.swift"), /exact: "2\.55\.7"/);
