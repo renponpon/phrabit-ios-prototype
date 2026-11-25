@@ -13,6 +13,24 @@ struct GuestAttestKey: Codable, Equatable {
 
     let identifier: String
     var phase: Phase
+    let previousIdentifier: String?
+
+    init(identifier: String, phase: Phase, previousIdentifier: String? = nil) {
+        self.identifier = identifier
+        self.phase = phase
+        self.previousIdentifier = previousIdentifier
+    }
+
+    var canPrepareRetry: Bool { phase == .awaitingConfirmation && previousIdentifier == nil }
+
+    func permitsUpdate(to new: Self) -> Bool {
+        if identifier == new.identifier {
+            return previousIdentifier == new.previousIdentifier &&
+                ((phase == .allocated && new.phase == .awaitingConfirmation) ||
+                 (phase == .awaitingConfirmation && new.phase == .registered))
+        }
+        return canPrepareRetry && new.phase == .allocated && new.previousIdentifier == identifier
+    }
 
     func fingerprint() throws -> String {
         guard let bytes = Data(base64Encoded: identifier), bytes.count == 32,
@@ -111,6 +129,22 @@ final class GuestDeviceCheckFlow {
         return keyHash
     }
 
+    func prepareRegistrationRetry() async throws -> String {
+        try begin()
+        defer { busy = false }
+        guard let saved = try keyStore.read(), saved.canPrepareRetry else {
+            throw GuestDeviceCheckError.unsupportedKeyState
+        }
+        _ = try saved.fingerprint()
+        let replacement = GuestAttestKey(identifier: try await provider.generateKey(), phase: .allocated,
+                                         previousIdentifier: saved.identifier)
+        let keyHash = try replacement.fingerprint()
+        guard saved.identifier != replacement.identifier else { throw GuestDeviceCheckError.invalidKey }
+        try Task.checkCancellation()
+        try keyStore.replace(saved, with: replacement)
+        return keyHash
+    }
+
     func enroll() async throws {
         try begin()
         defer { busy = false }
@@ -120,14 +154,17 @@ final class GuestDeviceCheckFlow {
         let challenge = try await api.challenge(.register, keyHash: keyHash)
         let clientDataHash = try challenge.clientDataHash(for: .register, keyHash: keyHash, at: now())
         try Task.checkCancellation()
-        let pending = GuestAttestKey(identifier: allocated.identifier, phase: .awaitingConfirmation)
+        var pending = allocated
+        pending.phase = .awaitingConfirmation
         try keyStore.replace(allocated, with: pending)
         let proof = try await provider.attestKey(allocated.identifier, clientDataHash: clientDataHash)
         guard !proof.isEmpty, proof.count <= 24 * 1024 else { throw GuestDeviceCheckError.invalidProof }
         _ = try challenge.nonceData(at: now())
         try Task.checkCancellation()
         try await api.register(GuestDeviceProof(challengeId: challenge.challengeId, keyHash: keyHash, proof: proof.base64EncodedString()))
-        try keyStore.replace(pending, with: GuestAttestKey(identifier: allocated.identifier, phase: .registered))
+        var registered = pending
+        registered.phase = .registered
+        try keyStore.replace(pending, with: registered)
     }
 
     func confirm() async throws {
@@ -144,7 +181,9 @@ final class GuestDeviceCheckFlow {
         try Task.checkCancellation()
         try await api.confirm(GuestDeviceProof(challengeId: challenge.challengeId, keyHash: keyHash, proof: proof.base64EncodedString()))
         if saved.phase == .awaitingConfirmation {
-            try keyStore.replace(saved, with: GuestAttestKey(identifier: saved.identifier, phase: .registered))
+            var registered = saved
+            registered.phase = .registered
+            try keyStore.replace(saved, with: registered)
         }
     }
 

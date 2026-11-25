@@ -17,13 +17,14 @@ private struct GuestDeviceProbeView: View {
     @StateObject private var exchange = GuestProbeBrowserExchange()
     @State private var address = ""
     @State private var fingerprint: String?
-    @State private var savedPhase: GuestAttestKey.Phase?
+    @State private var savedKey: GuestAttestKey?
+    @State private var askingToPrepareRetry = false
     @State private var status = ""
     @State private var running: Task<Void, Never>?
     private let keyStore = KeychainGuestAttestKeyStore()
 
     private enum Action {
-        case prepare, enroll, confirm
+        case prepare, prepareRetry, enroll, confirm
     }
 
     private var previewURL: URL? {
@@ -58,9 +59,13 @@ private struct GuestDeviceProbeView: View {
                     }
                     .disabled(previewURL == nil)
                     Button("初回登録を始める") { run(.enroll) }
-                        .disabled(savedPhase != .allocated || previewURL == nil || running != nil)
+                        .disabled(savedKey?.phase != .allocated || previewURL == nil || running != nil)
                     Button("同じキーで再確認") { run(.confirm) }
-                        .disabled(savedPhase == nil || savedPhase == .allocated || previewURL == nil || running != nil)
+                        .disabled(savedKey == nil || savedKey?.phase == .allocated || previewURL == nil || running != nil)
+                    if savedKey?.canPrepareRetry == true {
+                        Button("未登録を確認済み：やり直しの準備") { askingToPrepareRetry = true }
+                            .disabled(running != nil)
+                    }
                 } header: { Text("2. 登録・再確認") }
 
                 if let request = exchange.pending {
@@ -95,15 +100,23 @@ private struct GuestDeviceProbeView: View {
             }
             .navigationTitle("Phrabit 端末確認")
             .onAppear { refreshSavedState() }
+            .confirmationDialog("新しい検証用キーを1回だけ準備しますか？", isPresented: $askingToPrepareRetry, titleVisibility: .visible) {
+                Button("未登録を確認済み・準備する") { run(.prepareRetry) }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("担当者から前のキーが未登録で、前の検証枠が閉じていると案内された場合だけ進んでください。前のキーは削除されません。")
+            }
         }
     }
 
     private func refreshSavedState() {
         do {
             let saved = try keyStore.read()
-            savedPhase = saved?.phase
             fingerprint = try saved?.fingerprint()
+            savedKey = saved
         } catch {
+            savedKey = nil
+            fingerprint = nil
             status = "保存した端末キーを読み取れませんでした。"
         }
     }
@@ -129,6 +142,10 @@ private struct GuestDeviceProbeView: View {
                 case .prepare:
                     fingerprint = try await flow.prepare()
                     status = "この端末のキーを準備しました。"
+                case .prepareRetry:
+                    fingerprint = try await flow.prepareRegistrationRetry()
+                    address = ""
+                    status = "新しい検証用キーを準備しました。「キー指紋をコピー」で新しい指紋を担当者に渡し、新しい検証枠を待ってください。"
                 case .enroll:
                     try await flow.enroll()
                     status = "初回登録の結果を受け取りました。アプリを終了して開き直し、再確認してください。"
@@ -140,6 +157,8 @@ private struct GuestDeviceProbeView: View {
                 status = "中止しました。キーは作り直しません。"
             } catch GuestDeviceCheckError.unsupported {
                 status = "この端末ではApp Attestを利用できません。"
+            } catch GuestDeviceCheckError.invalidChallenge {
+                status = "確認データの有効期限が切れたか、内容を確認できませんでした。再送やキーの作り直しはせず、担当者にお知らせください。"
             } catch {
                 status = "確認できませんでした。キーを作り直さず、検証ページの表示を確認してください。"
             }

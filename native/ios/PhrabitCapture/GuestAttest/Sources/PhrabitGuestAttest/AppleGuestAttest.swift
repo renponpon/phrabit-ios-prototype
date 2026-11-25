@@ -55,7 +55,7 @@ struct KeychainGuestAttestKeyStore: GuestAttestKeyStore {
     }
 
     func replace(_ old: GuestAttestKey, with new: GuestAttestKey) throws {
-        guard old.identifier == new.identifier, try read() == old else { throw GuestDeviceCheckError.storageUnavailable }
+        guard old.permitsUpdate(to: new), try read() == old else { throw GuestDeviceCheckError.storageUnavailable }
         let attributes = [kSecValueData as String: try JSONEncoder().encode(new)]
         guard SecItemUpdate(identity as CFDictionary, attributes as CFDictionary) == errSecSuccess else {
             throw GuestDeviceCheckError.storageUnavailable

@@ -75,6 +75,64 @@ final class GuestDeviceCheckFlowTests: XCTestCase {
     }
 
     @MainActor
+    func testAnExplicitRetryPreservesTheOldKeyAndReopensWithTheRegisteredReplacement() async throws {
+        let provider = TestProvider()
+        let store = TestKeyStore()
+        store.key = try JSONDecoder().decode(GuestAttestKey.self, from: Data("""
+        {"identifier":"\(provider.identifier)","phase":"awaitingConfirmation"}
+        """.utf8))
+        let api = TestEndpoint(first: challenge(offset: 45), second: challenge(offset: 60, isConfirmation: true))
+        let wire = GuestCheckJSONAPI(exchange: api.send)
+        let flow = GuestDeviceCheckFlow(provider: provider, keyStore: store, api: wire, now: { self.now })
+        let beforeRetry = try await flow.prepare()
+        XCTAssertEqual(beforeRetry, fingerprint)
+        XCTAssertEqual(provider.created, 0)
+        provider.nextIdentifier = Data(repeating: 0xde, count: 32).base64EncodedString()
+        let replacementHash = try await flow.prepareRegistrationRetry()
+        XCTAssertEqual(replacementHash, String(repeating: "de", count: 32))
+        XCTAssertEqual(store.key?.previousIdentifier, provider.identifier)
+        XCTAssertEqual(store.key?.phase, .allocated)
+        XCTAssertTrue(api.requests.isEmpty)
+
+        try await flow.enroll()
+        let reopenedStore = TestKeyStore()
+        reopenedStore.key = try JSONDecoder().decode(GuestAttestKey.self, from: JSONEncoder().encode(XCTUnwrap(store.key)))
+        let reopened = GuestDeviceCheckFlow(provider: provider, keyStore: reopenedStore, api: wire, now: { self.now })
+        try await reopened.confirm()
+        XCTAssertEqual(reopenedStore.key?.phase, .registered)
+        XCTAssertEqual(reopenedStore.key?.previousIdentifier, provider.identifier)
+        XCTAssertEqual(provider.attestedKeys, [try XCTUnwrap(provider.nextIdentifier)])
+        XCTAssertEqual(provider.assertedKeys, provider.attestedKeys)
+        XCTAssertTrue(api.requests.allSatisfy { $0.object["keyHash"] == replacementHash })
+        XCTAssertEqual(provider.created, 1)
+    }
+
+    @MainActor
+    func testRetryIsUnavailableForRegisteredOrAlreadyRetriedKeys() async throws {
+        let provider = TestProvider()
+        let store = TestKeyStore()
+        let api = TestEndpoint(first: challenge(offset: 45), second: challenge(offset: 60, isConfirmation: true))
+        let flow = GuestDeviceCheckFlow(provider: provider, keyStore: store, api: GuestCheckJSONAPI(exchange: api.send))
+        for saved in [
+            GuestAttestKey(identifier: provider.identifier, phase: .allocated),
+            GuestAttestKey(identifier: provider.identifier, phase: .registered),
+            GuestAttestKey(identifier: provider.identifier, phase: .awaitingConfirmation,
+                           previousIdentifier: Data(repeating: 0xde, count: 32).base64EncodedString())
+        ] {
+            store.key = saved
+            do {
+                _ = try await flow.prepareRegistrationRetry()
+                XCTFail("This saved key must not be replaced")
+            } catch {
+                XCTAssertEqual(error as? GuestDeviceCheckError, .unsupportedKeyState)
+            }
+            XCTAssertEqual(store.key, saved)
+        }
+        XCTAssertEqual(provider.created, 0)
+        XCTAssertTrue(api.requests.isEmpty)
+    }
+
+    @MainActor
     func testExpiredChallengeDoesNotAskAppleToAttest() async throws {
         let provider = TestProvider()
         let store = TestKeyStore()
@@ -147,6 +205,7 @@ private final class TestProvider: GuestAttestProvider {
     let identifier = Data(repeating: 0xcd, count: 32).base64EncodedString()
     let isSupported = true
     var created = 0
+    var nextIdentifier: String?
     var attestedKeys: [String] = []
     var assertedKeys: [String] = []
     var attestedDigest: Data?
@@ -154,7 +213,7 @@ private final class TestProvider: GuestAttestProvider {
 
     func generateKey() async throws -> String {
         created += 1
-        return identifier
+        return nextIdentifier ?? identifier
     }
 
     func attestKey(_ identifier: String, clientDataHash: Data) async throws -> Data {
@@ -182,7 +241,7 @@ private final class TestKeyStore: GuestAttestKeyStore {
     }
 
     func replace(_ old: GuestAttestKey, with new: GuestAttestKey) throws {
-        guard self.key == old else { throw GuestDeviceCheckError.storageUnavailable }
+        guard self.key == old, old.permitsUpdate(to: new) else { throw GuestDeviceCheckError.storageUnavailable }
         self.key = new
     }
 }
