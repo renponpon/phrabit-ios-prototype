@@ -19,10 +19,14 @@ const connectionMarker = 'PhrabitGuestConnectionOnly';
 const deviceVariant = 'guest-device-probe';
 const deviceTarget = 'PhrabitGuestDeviceProbe';
 const deviceMarker = 'PhrabitGuestDeviceProofOnly';
+const deviceInAppVariant = 'guest-device-in-app';
+const deviceInAppTarget = 'PhrabitGuestDeviceInApp';
+const deviceInAppMarker = 'PhrabitGuestDeviceInAppProofOnly';
 const attestEntitlement = 'com.apple.developer.devicecheck.appattest-environment';
 const standaloneBuilds = new Map([
   [connectionVariant, { target: connectionTarget, marker: connectionMarker, spec: 'guest-connection.yml', inspection: 'connectionInspectionPassed' }],
-  [deviceVariant, { target: deviceTarget, marker: deviceMarker, spec: 'guest-device-probe.yml', inspection: 'deviceProbeInspectionPassed' }]
+  [deviceVariant, { target: deviceTarget, marker: deviceMarker, spec: 'guest-device-probe.yml', inspection: 'deviceProbeInspectionPassed' }],
+  [deviceInAppVariant, { target: deviceInAppTarget, marker: deviceInAppMarker, spec: 'guest-device-in-app.yml', inspection: 'deviceInAppInspectionPassed' }]
 ]);
 const offlineBuilds = new Map([
   ['startup-timing', {
@@ -240,14 +244,38 @@ export function guestDeviceProbeDistributionSpec(teamId, appUuid, buildNumber) {
   return standaloneDistributionSpec(standaloneBuilds.get(deviceVariant), teamId, appUuid, buildNumber);
 }
 
+export function guestDeviceInAppDistributionSpec(teamId, appUuid, buildNumber) {
+  return standaloneDistributionSpec(standaloneBuilds.get(deviceInAppVariant), teamId, appUuid, buildNumber);
+}
+
+export function guestDeviceInAppUnsignedReleaseSpec() {
+  const spec = guestDeviceInAppDistributionSpec('TESTTEAM01', '00000000-0000-0000-0000-000000000001', '1.1');
+  const target = spec.targets[deviceInAppTarget];
+  const { PRODUCT_BUNDLE_IDENTIFIER, ASSETCATALOG_COMPILER_APPICON_NAME, CURRENT_PROJECT_VERSION, SKIP_INSTALL } = target.settings.configs.Release;
+  target.settings.configs.Release = {
+    PRODUCT_BUNDLE_IDENTIFIER, ASSETCATALOG_COMPILER_APPICON_NAME, CURRENT_PROJECT_VERSION, SKIP_INSTALL,
+    CODE_SIGNING_ALLOWED: 'NO',
+    CODE_SIGNING_REQUIRED: 'NO'
+  };
+  return spec;
+}
+
 function standaloneDistributionSpec({ target, marker, spec }, teamId, appUuid, buildNumber) {
   assert.match(teamId, /^[A-Z0-9]{10}$/);
   assert.match(appUuid, /^[A-F0-9-]{36}$/i);
   assert.match(buildNumber, /^[1-9]\d{0,3}\.[1-9]\d{0,3}$/);
+  const inApp = target === deviceInAppTarget;
   return {
     include: [spec],
     targets: {
       [target]: {
+        ...(inApp ? {
+          sources: [{ path: 'App/Assets.xcassets', buildPhase: 'resources' }],
+          entitlements: {
+            path: 'Generated/GuestDeviceInApp.entitlements',
+            properties: { [attestEntitlement]: 'production' }
+          }
+        } : {}),
         settings: { configs: { Release: {
           CODE_SIGNING_ALLOWED: 'YES',
           CODE_SIGNING_REQUIRED: 'YES',
@@ -257,6 +285,10 @@ function standaloneDistributionSpec({ target, marker, spec }, teamId, appUuid, b
           DEVELOPMENT_TEAM: teamId,
           PROVISIONING_PROFILE_SPECIFIER: appUuid,
           CURRENT_PROJECT_VERSION: buildNumber,
+          ...(inApp ? {
+            PRODUCT_BUNDLE_IDENTIFIER: 'com.phrabit.app',
+            ASSETCATALOG_COMPILER_APPICON_NAME: 'AppIcon'
+          } : {}),
           SKIP_INSTALL: 'NO'
         } } },
         info: { properties: {
@@ -277,7 +309,25 @@ export function assertGuestConnectionBundle(info, executable, buildNumber) {
 }
 
 export function assertGuestDeviceProbeBundle(info, executable, entitlements, team, buildNumber) {
-  assertStandaloneBundle(standaloneBuilds.get(deviceVariant), info, executable, buildNumber);
+  assertDeviceProofBundle(standaloneBuilds.get(deviceVariant), info, executable, entitlements, team, buildNumber);
+}
+
+export function assertGuestDeviceInAppBundle(info, executable, entitlements, team, buildNumber) {
+  assertDeviceProofBundle(standaloneBuilds.get(deviceInAppVariant), info, executable, entitlements, team, buildNumber);
+  const appIdentity = team + '.com.phrabit.app';
+  assert.equal(entitlements['com.apple.developer.team-identifier'], team, 'Expected the existing signing team');
+  if (Object.hasOwn(entitlements, 'keychain-access-groups')) {
+    assert.deepEqual(entitlements['keychain-access-groups'], [appIdentity], 'Only the existing default Keychain group is allowed');
+  }
+  assert.ok(!Object.hasOwn(entitlements, 'com.apple.security.application-groups'), 'Unexpected shared app container');
+  for (const marker of ['WKWebView', 'requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:', 'x-phrabit-preview-pass', 'device-check']) {
+    assert.ok(executable.includes(marker), 'Missing protected in-app verification implementation');
+  }
+  assert.ok(!executable.includes('x-vercel-protection-bypass'), 'Unexpected Vercel protection override');
+}
+
+function assertDeviceProofBundle(standalone, info, executable, entitlements, team, buildNumber) {
+  assertStandaloneBundle(standalone, info, executable, buildNumber);
   assert.equal(entitlements[attestEntitlement], 'production', 'Missing signed App Attest production entitlement');
   assert.equal(entitlements['application-identifier'], team + '.com.phrabit.app');
   assert.ok(entitlements['get-task-allow'] !== true, 'An internal upload must not permit debugging');
@@ -302,7 +352,9 @@ function assertStandaloneBundle({ target, marker }, info, executable, buildNumbe
   ]) {
     assert.ok(!Object.hasOwn(info, key), `Unexpected connection bundle key: ${key}`);
   }
-  for (const marker of ['AVAudioRecorder', 'requestRecordPermission', 'CaptureHTTPProcessor', 'URLSession', 'supabase.co', 'x-phrabit-preview-pass']) {
+  const disallowed = ['AVAudioRecorder', 'requestRecordPermission', 'CaptureHTTPProcessor', 'URLSession', 'supabase.co'];
+  if (target !== deviceInAppTarget) disallowed.push('x-phrabit-preview-pass');
+  for (const marker of disallowed) {
     assert.ok(!executable.includes(marker), `Unexpected connection executable marker: ${marker}`);
   }
 }
@@ -424,6 +476,9 @@ function main(stage) {
       assert.equal(profile.TeamIdentifier[0], requireSecret('APPLE_TEAM_ID'));
       assert.equal(profile.Entitlements['application-identifier'], `${profile.TeamIdentifier[0]}.${bundleId}`);
       assert.equal(profile.Entitlements['get-task-allow'], false);
+      if (offlineVariant === deviceInAppVariant) {
+        assert.equal(profile.Entitlements[attestEntitlement], 'production', 'Existing app profile must allow App Attest production');
+      }
       assert.equal(profile.ProvisionedDevices, undefined);
       assert.equal(profile.ProvisionsAllDevices, undefined);
       assert.ok(!/<key>\s*(ProvisionedDevices|ProvisionsAllDevices)\s*<\/key>/.test(profileXml), 'App Store profiles must not contain device-list distribution settings');
@@ -471,6 +526,8 @@ function main(stage) {
     const standalone = standaloneBuilds.get(state.offlineInternalVariant);
     if (standalone) {
       const { target, inspection } = standalone;
+      const inspectProofBundle = target === deviceTarget ? assertGuestDeviceProbeBundle
+        : target === deviceInAppTarget ? assertGuestDeviceInAppBundle : undefined;
       const inspectDevicePackage = (appPath, label) => {
         assert.ok(!existsSync(path.join(appPath, 'PlugIns')), 'The standalone app must not contain extensions');
         run('codesign', ['--verify', '--strict', appPath], label + '-verify');
@@ -479,7 +536,7 @@ function main(stage) {
         run('codesign', ['-d', '--xml', '--entitlements', signedEntitlements, appPath], label + '-entitlements');
         assert.ok(existsSync(signedEntitlements), 'Signed app does not contain entitlements');
         const entitlements = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', signedEntitlements], label + '-entitlements-plist'));
-        assertGuestDeviceProbeBundle(info, readFileSync(path.join(appPath, target)), entitlements, state.teamId, state.buildNumber);
+        inspectProofBundle(info, readFileSync(path.join(appPath, target)), entitlements, state.teamId, state.buildNumber);
       };
       assert.ok(state.previewAuthOnly === false && state.audioPilotMode === null && state.audioPilotVariant === 'none');
       const appUuid = state.profileUuids[target];
@@ -506,7 +563,7 @@ function main(stage) {
       const appPath = path.join(archivePath, 'Products/Applications', target + '.app');
       const executablePath = path.join(appPath, target);
       assert.ok(!existsSync(path.join(appPath, 'PlugIns')), 'The standalone app must not contain extensions');
-      if (target === deviceTarget) {
+      if (inspectProofBundle) {
         inspectDevicePackage(appPath, 'device-archive');
       } else {
         const info = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', path.join(appPath, 'Info.plist')], 'connection-bundle-info'));
@@ -517,7 +574,7 @@ function main(stage) {
       const symbols = run('xcrun', ['nm', '-m', executablePath], 'connection-symbols');
       inspectEncryptionEvidence(links, symbols);
       state.ipaPath = exportArchive(archivePath);
-      if (target === deviceTarget) {
+      if (inspectProofBundle) {
         const exported = path.join(privateRoot, 'exported-probe');
         run('ditto', ['-x', '-k', state.ipaPath, exported], 'device-ipa-unpack');
         inspectDevicePackage(path.join(exported, 'Payload', target + '.app'), 'device-ipa');

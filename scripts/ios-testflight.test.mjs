@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { approvedPreviewProjectDigest, assertGuestConnectionBundle, assertGuestDeviceProbeBundle, assertTestFlightUploadAllowed, audioPilotMode, classifyCommandFailure, dependencyRevisions, distributionSpec, guestConnectionDistributionSpec, guestDeviceProbeDistributionSpec, guestUnsignedSpec, inspectEncryptionEvidence, offlineInternalVariant, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
+import { approvedPreviewProjectDigest, assertGuestConnectionBundle, assertGuestDeviceInAppBundle, assertGuestDeviceProbeBundle, assertTestFlightUploadAllowed, audioPilotMode, classifyCommandFailure, dependencyRevisions, distributionSpec, guestConnectionDistributionSpec, guestDeviceInAppDistributionSpec, guestDeviceInAppUnsignedReleaseSpec, guestDeviceProbeDistributionSpec, guestUnsignedSpec, inspectEncryptionEvidence, offlineInternalVariant, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
 
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
@@ -248,7 +248,7 @@ test('offline variants are opt-in and reject online modes and settings', () => {
   for (const invalid of ['yes', '', 'translation-home,startup-timing']) {
     assert.throws(() => offlineInternalVariant({ IOS_OFFLINE_INTERNAL_VARIANT: invalid }), /Invalid offline internal variant/);
   }
-  for (const variant of ['startup-timing', 'translation-home', 'guest-home', 'guest-connection', 'guest-device-probe']) {
+  for (const variant of ['startup-timing', 'translation-home', 'guest-home', 'guest-connection', 'guest-device-probe', 'guest-device-in-app']) {
     const selected = { IOS_OFFLINE_INTERNAL_VARIANT: variant, IOS_GUEST_NO_AUTO_DISTRIBUTION: String(variant.startsWith('guest-')) };
     assert.equal(offlineInternalVariant(selected), variant);
     for (const conflict of ['IOS_PREVIEW_AUTH_ONLY', 'IOS_PREVIEW_CAPTURE_CHECK', 'IOS_PREVIEW_MOCK_RECORDING', 'IOS_PREVIEW_AUDIO_ACCESS_ONLY']) {
@@ -317,8 +317,8 @@ test('offline submissions require the inspected exact variant and are isolated f
   const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
   assert.match(workflow, /offline_internal_variant:\s+description:[^\r\n]+\s+type: choice\s+required: false\s+default: 'none'\s+options:\s+- 'none'\s+- startup-timing\s+- translation-home\s+- guest-home/);
   assert.match(workflow, /confirm_guest_no_auto_distribution:\s+description:[^\r\n]+\s+type: boolean\s+required: false\s+default: false/);
-  assert.match(workflow, /github\.ref == 'refs\/heads\/main' && inputs\.confirm_internal_only && inputs\.confirm_guest_no_auto_distribution == contains\(fromJSON\('\["guest-home","guest-connection","guest-device-probe"\]'\), inputs\.offline_internal_variant\)/);
-  assert.match(workflow, /name: Submit the inspected offline build for internal testing only\s+if: \$\{\{ inputs\.offline_internal_variant == 'startup-timing' \|\| inputs\.offline_internal_variant == 'translation-home' \|\| \(contains\(fromJSON\('\["guest-home","guest-connection","guest-device-probe"\]'\), inputs\.offline_internal_variant\) && inputs\.confirm_guest_no_auto_distribution\) \}\}\s+env:\s+IOS_OFFLINE_INTERNAL_VARIANT:[^\r\n]+\s+IOS_GUEST_NO_AUTO_DISTRIBUTION:[^\r\n]+[\s\S]*?run: node scripts\/ios-testflight\.mjs upload-offline/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/main' && inputs\.confirm_internal_only && inputs\.confirm_guest_no_auto_distribution == contains\(fromJSON\('\["guest-home","guest-connection","guest-device-probe","guest-device-in-app"\]'\), inputs\.offline_internal_variant\)/);
+  assert.match(workflow, /name: Submit the inspected offline build for internal testing only\s+if: \$\{\{ inputs\.offline_internal_variant == 'startup-timing' \|\| inputs\.offline_internal_variant == 'translation-home' \|\| \(contains\(fromJSON\('\["guest-home","guest-connection","guest-device-probe","guest-device-in-app"\]'\), inputs\.offline_internal_variant\) && inputs\.confirm_guest_no_auto_distribution\) \}\}\s+env:\s+IOS_OFFLINE_INTERNAL_VARIANT:[^\r\n]+\s+IOS_GUEST_NO_AUTO_DISTRIBUTION:[^\r\n]+[\s\S]*?run: node scripts\/ios-testflight\.mjs upload-offline/);
   for (const setting of ['IOS_PREVIEW_PROJECT_REF', 'IOS_PREVIEW_PUBLISHABLE_KEY']) {
     assert.ok(workflow.includes(`${setting}: \${{ inputs.offline_internal_variant == 'none' && secrets.${setting} || '' }}`));
   }
@@ -338,7 +338,7 @@ test('signed connection uses only the standalone Release app and its existing pr
   assert.throws(() => guestConnectionDistributionSpec('invalid', appUuid, '18.1'));
   const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
   assert.match(workflow, /- guest-home\s+- guest-connection/);
-  assert.match(workflow, /IOS_CONTROL_PROFILE_BASE64: \$\{\{ !contains\(fromJSON\('\["guest-connection","guest-device-probe"\]'\), inputs\.offline_internal_variant\) && secrets\.IOS_CONTROL_PROFILE_BASE64 \|\| '' \}\}/);
+  assert.match(workflow, /IOS_CONTROL_PROFILE_BASE64: \$\{\{ !contains\(fromJSON\('\["guest-connection","guest-device-probe","guest-device-in-app"\]'\), inputs\.offline_internal_variant\) && secrets\.IOS_CONTROL_PROFILE_BASE64 \|\| '' \}\}/);
 });
 
 test('connection inspection rejects recording, direct network code and export answers', () => {
@@ -400,6 +400,76 @@ test('signed proof-only bundle requires App Attest production and excludes captu
   assert.throws(() => inspect({ ...info, ITSAppUsesNonExemptEncryption: false }, markers), /Unexpected connection bundle key/);
   assert.throws(() => inspect(info, markers + '/api/ios/guest/capture'), /Unexpected capture route/);
   assert.throws(() => inspect(info, markers + 'AVAudioRecorder'), /Unexpected connection executable marker/);
+});
+
+test('the protected in-app proof overlay signs only Release with the existing app identity', () => {
+  const spec = guestDeviceInAppDistributionSpec('TESTTEAM01', appUuid, '23.1');
+  assert.deepEqual(spec.include, ['guest-device-in-app.yml']);
+  assert.deepEqual(Object.keys(spec.targets), ['PhrabitGuestDeviceInApp']);
+  const target = spec.targets.PhrabitGuestDeviceInApp;
+  assert.deepEqual(Object.keys(target.settings.configs), ['Release']);
+  assert.deepEqual(target.entitlements.properties, { 'com.apple.developer.devicecheck.appattest-environment': 'production' });
+  assert.equal(target.settings.configs.Release.PRODUCT_BUNDLE_IDENTIFIER, 'com.phrabit.app');
+  assert.equal(target.settings.configs.Release.DEVELOPMENT_TEAM, 'TESTTEAM01');
+  assert.equal(target.settings.configs.Release.PROVISIONING_PROFILE_SPECIFIER, appUuid);
+  assert.equal(target.settings.configs.Release.ASSETCATALOG_COMPILER_APPICON_NAME, 'AppIcon');
+  assert.equal(target.info.properties.PhrabitGuestDeviceInAppProofOnly, true);
+  const unsigned = guestDeviceInAppUnsignedReleaseSpec();
+  const unsignedTarget = unsigned.targets.PhrabitGuestDeviceInApp;
+  assert.deepEqual(unsigned.include, spec.include);
+  assert.deepEqual(unsignedTarget.info, target.info);
+  assert.deepEqual(unsignedTarget.entitlements, target.entitlements);
+  assert.deepEqual(unsignedTarget.sources, target.sources);
+  const release = unsignedTarget.settings.configs.Release;
+  assert.equal(release.PRODUCT_BUNDLE_IDENTIFIER, 'com.phrabit.app');
+  assert.equal(release.CODE_SIGNING_ALLOWED, 'NO');
+  assert.equal(release.CODE_SIGNING_REQUIRED, 'NO');
+  assert.doesNotMatch(JSON.stringify(unsigned), /TESTTEAM01|PROVISIONING_PROFILE|CODE_SIGN_IDENTITY|DEVELOPMENT_TEAM/);
+});
+
+test('in-app proof upload requires its own inspection and does not accept the original device proof result', () => {
+  const variant = 'guest-device-in-app';
+  const selected = { IOS_OFFLINE_INTERNAL_VARIANT: variant, IOS_GUEST_NO_AUTO_DISTRIBUTION: 'true' };
+  const state = { audioPilotMode: null, audioPilotVariant: 'none', offlineInternalVariant: variant,
+    previewAuthOnly: false, offlineInspectionPassed: true, deviceProbeInspectionPassed: true };
+  assert.equal(offlineInternalVariant(selected), variant);
+  assert.throws(() => offlineInternalVariant({ ...selected, IOS_GUEST_NO_AUTO_DISTRIBUTION: 'false' }), /own automatic distribution check/);
+  assert.throws(() => offlineInternalVariant({ ...selected, IOS_PREVIEW_AUTH_ONLY: 'true' }), /exclude Preview modes/);
+  assert.throws(() => assertTestFlightUploadAllowed(state, 'none', variant), /standalone signed app inspection/);
+  const inspected = { ...state, deviceInAppInspectionPassed: true };
+  assert.doesNotThrow(() => assertTestFlightUploadAllowed(inspected, 'none', variant));
+  assert.throws(() => assertTestFlightUploadAllowed(inspected, 'none', 'guest-device-probe'), /exact variant match/);
+  assert.throws(() => assertTestFlightUploadAllowed(inspected, 'none'), /separate internal upload stage/);
+});
+
+test('in-app device inspection rejects a new identity, shared Keychain, recorder and export answers', () => {
+  const identity = 'TESTTEAM01.com.phrabit.app';
+  const entitlements = { 'com.apple.developer.devicecheck.appattest-environment': 'production',
+    'application-identifier': identity, 'com.apple.developer.team-identifier': 'TESTTEAM01' };
+  const info = { CFBundleIdentifier: 'com.phrabit.app', CFBundleExecutable: 'PhrabitGuestDeviceInApp',
+    CFBundleVersion: '23.1', CFBundleShortVersionString: '0.1.0', PhrabitGuestDeviceInAppProofOnly: true };
+  const mediaSelector = 'requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:';
+  const binary = 'phrabit-ios-guest-preview-/api/ios/guest/device-test,/api/ios/guest/device-check,DCAppAttestService,WKWebView,x-phrabit-preview-pass,' + mediaSelector;
+  const inspect = (properties = info, contents = binary, signing = entitlements) =>
+    assertGuestDeviceInAppBundle(properties, Buffer.from(contents), signing, 'TESTTEAM01', '23.1');
+  assert.doesNotThrow(() => inspect());
+  assert.doesNotThrow(() => inspect(info, binary, { ...entitlements, 'keychain-access-groups': [identity] }));
+  for (const override of [
+    { 'application-identifier': 'OTHERTEAM0.com.phrabit.app' },
+    { 'com.apple.developer.team-identifier': 'OTHERTEAM0' },
+    { 'keychain-access-groups': ['TESTTEAM01.*'] },
+    { 'keychain-access-groups': [identity, 'TESTTEAM01.some-other-app'] },
+    { 'com.apple.security.application-groups': ['group.com.phrabit'] },
+    { 'get-task-allow': true },
+    { 'com.apple.developer.devicecheck.appattest-environment': 'development' },
+  ]) assert.throws(() => inspect(info, binary, { ...entitlements, ...override }));
+  for (const key of ['NSMicrophoneUsageDescription', 'ITSAppUsesNonExemptEncryption', 'PhrabitGuestDeviceProofOnly', 'NSAppTransportSecurity']) {
+    assert.throws(() => inspect({ ...info, [key]: false }), /Unexpected connection bundle key/);
+  }
+  for (const marker of ['AVAudioRecorder', '/api/ios/guest/capture', 'URLSession', 'x-vercel-protection-bypass']) {
+    assert.throws(() => inspect(info, binary + marker));
+  }
+  assert.throws(() => inspect(info, binary.replace(mediaSelector, '')), /Missing protected in-app verification/);
 });
 
 test('direct offline upload rejects an omitted or mismatched variant before reading Apple credentials', () => {

@@ -66,7 +66,7 @@ const checks = [
   ["guest device proof is isolated from all shipping targets and accepts only its three proof routes", () => {
     const signing = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
     assert.doesNotMatch(read("project.yml") + read("guest-connection.yml"), /GuestAttest|GuestDeviceProbe|DEVICE_CHECK/);
-    assert.match(signing, /if: \$\{\{ inputs\.offline_internal_variant == 'guest-device-probe' \}\}\s+run: swift test --package-path native\/ios\/PhrabitCapture\/GuestAttest/);
+    assert.match(signing, /if: \$\{\{ contains\(fromJSON\('\["guest-device-probe","guest-device-in-app"\]'\), inputs\.offline_internal_variant\) \}\}\s+run: swift test --package-path native\/ios\/PhrabitCapture\/GuestAttest/);
     const source = "GuestAttest/Sources/PhrabitGuestAttest/";
     const api = read(source + "GuestCheckJSONAPI.swift");
     const transport = read(source + "GuestCheckPreviewTransport.swift");
@@ -95,11 +95,16 @@ const checks = [
     assert.match(exchange, /result.id == pending.id/);
     assert.doesNotMatch(view + exchange, /AVAudio|AudioRecorder|Speech\b|URLSession|Bearer|x-phrabit-preview-pass/);
   }],
-  ["in-app device confirmation is unsigned and absent from all shipping targets", () => {
+  ["in-app device confirmation is unsigned by default and limited to its internal variant", () => {
     const spec = read("guest-device-in-app.yml");
     const otherSpecs = readdirSync(prototypeRoot).filter(file => file.endsWith(".yml") && file !== "guest-device-in-app.yml");
     const distribution = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
-    assert.doesNotMatch(otherSpecs.map(read).join("\n") + distribution, /GuestDeviceInApp|guest-device-in-app/i);
+    assert.doesNotMatch(otherSpecs.map(read).join("\n"), /GuestDeviceInApp|guest-device-in-app/i);
+    assert.match(distribution, /confirm_guest_no_auto_distribution == contains\(fromJSON\('\["guest-home","guest-connection","guest-device-probe","guest-device-in-app"\]'\), inputs\.offline_internal_variant\)/);
+    assert.match(distribution, /if: \$\{\{ inputs\.offline_internal_variant == 'guest-device-in-app' \}\}\s+run: node --test scripts\/ios-guest-device-in-app.test.mjs/);
+    const unsignedDevice = readFileSync(path.join(root, ".github/workflows/ios-guest-device-check.yml"), "utf8");
+    assert.match(unsignedDevice, /guestDeviceInAppUnsignedReleaseSpec[\s\S]*?-configuration Release[\s\S]*?CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO/);
+    assert.doesNotMatch(unsignedDevice, /secrets\.|upload-artifact|altool|exportArchive/);
     assert.match(spec, /CODE_SIGNING_ALLOWED: "NO"/);
     assert.match(spec, /PRODUCT_BUNDLE_IDENTIFIER: com\.phrabit\.app\.guestdeviceinapp/);
     assert.doesNotMatch(spec, /NS(?:Microphone|Camera)UsageDescription|entitlements:|app-extension|CFBundleURLTypes/);
@@ -397,7 +402,7 @@ const checks = [
     assert.doesNotMatch(overlay, /Release:|PhrabitPreview|PHRABIT_LOCAL_LIVE_AUDIO/);
     const signingWorkflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
     assert.doesNotMatch(read("project.yml") + signingWorkflow, /PHRABIT_OFFLINE_GUEST_(?:HOME|TESTFLIGHT)/);
-    assert.match(signingWorkflow, /\(contains\(fromJSON\('\["guest-home","guest-connection","guest-device-probe"\]'\), inputs\.offline_internal_variant\) && inputs\.confirm_guest_no_auto_distribution\)/);
+    assert.match(signingWorkflow, /\(contains\(fromJSON\('\["guest-home","guest-connection","guest-device-probe","guest-device-in-app"\]'\), inputs\.offline_internal_variant\) && inputs\.confirm_guest_no_auto_distribution\)/);
     const unsignedWorkflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
     assert.match(unsignedWorkflow, /inputs\.compile_translation_home[\s\S]*?PHRABIT_OFFLINE_TRANSLATION_HOME[\s\S]*?CODE_SIGNING_ALLOWED=NO/);
     assert.match(unsignedWorkflow, /inputs\.compile_guest_home[\s\S]*?guestUnsignedSpec\(\)[\s\S]*?-configuration Release[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?PhrabitOfflineGuestTestFlight/);
