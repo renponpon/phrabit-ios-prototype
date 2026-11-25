@@ -15,7 +15,7 @@ struct PhrabitGuestDeviceProbeApp: App {
 private struct GuestDeviceProbeView: View {
     @Environment(\.openURL) private var openURL
     @StateObject private var exchange = GuestProbeBrowserExchange()
-    @AppStorage("guestDeviceProbePreviewURL") private var address = ""
+    @State private var address = ""
     @State private var fingerprint: String?
     @State private var savedPhase: GuestAttestKey.Phase?
     @State private var status = ""

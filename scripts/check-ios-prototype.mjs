@@ -65,7 +65,8 @@ const checks = [
   }],
   ["guest device proof is isolated from all shipping targets and accepts only its three proof routes", () => {
     const signing = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
-    assert.doesNotMatch(read("project.yml") + read("guest-connection.yml") + signing, /GuestAttest|GuestDeviceProbe|DEVICE_CHECK/);
+    assert.doesNotMatch(read("project.yml") + read("guest-connection.yml"), /GuestAttest|GuestDeviceProbe|DEVICE_CHECK/);
+    assert.match(signing, /if: \$\{\{ inputs\.offline_internal_variant == 'guest-device-probe' \}\}\s+run: swift test --package-path native\/ios\/PhrabitCapture\/GuestAttest/);
     const source = "GuestAttest/Sources/PhrabitGuestAttest/";
     const api = read(source + "GuestCheckJSONAPI.swift");
     const transport = read(source + "GuestCheckPreviewTransport.swift");
@@ -90,6 +91,7 @@ const checks = [
     assert.match(view, /\/api\/ios\/guest\/device-test/);
     assert.match(view, /\.localOnly: true, \.expirationDate:/);
     assert.match(view, /PasteButton/);
+    assert.doesNotMatch(view, /AppStorage|UserDefaults/);
     assert.match(exchange, /result.id == pending.id/);
     assert.doesNotMatch(view + exchange, /AVAudio|AudioRecorder|Speech\b|URLSession|Bearer|x-phrabit-preview-pass/);
   }],
@@ -374,7 +376,7 @@ const checks = [
     assert.doesNotMatch(overlay, /Release:|PhrabitPreview|PHRABIT_LOCAL_LIVE_AUDIO/);
     const signingWorkflow = readFileSync(path.join(root, ".github/workflows/ios-testflight.yml"), "utf8");
     assert.doesNotMatch(read("project.yml") + signingWorkflow, /PHRABIT_OFFLINE_GUEST_(?:HOME|TESTFLIGHT)/);
-    assert.match(signingWorkflow, /\(inputs\.offline_internal_variant == 'guest-home' && inputs\.confirm_guest_no_auto_distribution\)/);
+    assert.match(signingWorkflow, /\(contains\(fromJSON\('\["guest-home","guest-connection","guest-device-probe"\]'\), inputs\.offline_internal_variant\) && inputs\.confirm_guest_no_auto_distribution\)/);
     const unsignedWorkflow = readFileSync(path.join(root, ".github/workflows/ios-prototype.yml"), "utf8");
     assert.match(unsignedWorkflow, /inputs\.compile_translation_home[\s\S]*?PHRABIT_OFFLINE_TRANSLATION_HOME[\s\S]*?CODE_SIGNING_ALLOWED=NO/);
     assert.match(unsignedWorkflow, /inputs\.compile_guest_home[\s\S]*?guestUnsignedSpec\(\)[\s\S]*?-configuration Release[\s\S]*?CODE_SIGNING_ALLOWED=NO[\s\S]*?PhrabitOfflineGuestTestFlight/);

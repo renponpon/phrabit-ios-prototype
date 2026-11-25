@@ -56,7 +56,7 @@ on:
         required: false
         default: false
       offline_internal_variant:
-        description: オフライン試作または録音なし接続検証の内部提出
+        description: オフライン試作または録音なしの接続・端末確認の内部提出
         type: choice
         required: false
         default: 'none'
@@ -66,6 +66,7 @@ on:
           - translation-home
           - guest-home
           - guest-connection
+          - guest-device-probe
       confirm_guest_no_auto_distribution:
         description: ゲスト試作の提出前に、既存の本人グループのみ・自動配布なしを確認済み
         type: boolean
@@ -81,7 +82,7 @@ concurrency:
 
 jobs:
   distribute:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.confirm_internal_only && inputs.confirm_guest_no_auto_distribution == (inputs.offline_internal_variant == 'guest-home' || inputs.offline_internal_variant == 'guest-connection') }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirm_internal_only && inputs.confirm_guest_no_auto_distribution == contains(fromJSON('["guest-home","guest-connection","guest-device-probe"]'), inputs.offline_internal_variant) }}
     runs-on: macos-26-intel
     timeout-minutes: 20
     environment: ios-testflight
@@ -102,8 +103,11 @@ jobs:
           node scripts/check-ios-prototype.mjs
           node --test scripts/ios-public-export-policy.test.mjs scripts/ios-testflight.test.mjs
       - name: Test the capture prototype core
-        if: ${{ inputs.offline_internal_variant != 'guest-connection' }}
+        if: ${{ !contains(fromJSON('["guest-connection","guest-device-probe"]'), inputs.offline_internal_variant) }}
         run: swift test --package-path native/ios/PhrabitCapture/Core
+      - name: Test the isolated device probe core
+        if: ${{ inputs.offline_internal_variant == 'guest-device-probe' }}
+        run: swift test --package-path native/ios/PhrabitCapture/GuestAttest
       - name: Install project generator
         run: |
           if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
@@ -126,7 +130,7 @@ jobs:
           IOS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.IOS_SIGNING_CERTIFICATE_BASE64 }}
           IOS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.IOS_SIGNING_CERTIFICATE_PASSWORD }}
           IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
-          IOS_CONTROL_PROFILE_BASE64: ${{ inputs.offline_internal_variant != 'guest-connection' && secrets.IOS_CONTROL_PROFILE_BASE64 || '' }}
+          IOS_CONTROL_PROFILE_BASE64: ${{ !contains(fromJSON('["guest-connection","guest-device-probe"]'), inputs.offline_internal_variant) && secrets.IOS_CONTROL_PROFILE_BASE64 || '' }}
         run: node scripts/ios-testflight.mjs prepare
       - name: Build and verify signed iPhone archive
         run: node scripts/ios-testflight.mjs build
@@ -148,7 +152,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: node scripts/ios-testflight.mjs upload-audio-pilot
       - name: Submit the inspected offline build for internal testing only
-        if: ${{ inputs.offline_internal_variant == 'startup-timing' || inputs.offline_internal_variant == 'translation-home' || (inputs.offline_internal_variant == 'guest-home' && inputs.confirm_guest_no_auto_distribution) || (inputs.offline_internal_variant == 'guest-connection' && inputs.confirm_guest_no_auto_distribution) }}
+        if: ${{ inputs.offline_internal_variant == 'startup-timing' || inputs.offline_internal_variant == 'translation-home' || (contains(fromJSON('["guest-home","guest-connection","guest-device-probe"]'), inputs.offline_internal_variant) && inputs.confirm_guest_no_auto_distribution) }}
         env:
           IOS_OFFLINE_INTERNAL_VARIANT: ${{ inputs.offline_internal_variant }}
           IOS_GUEST_NO_AUTO_DISTRIBUTION: ${{ inputs.confirm_guest_no_auto_distribution }}
