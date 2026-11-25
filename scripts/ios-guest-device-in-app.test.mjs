@@ -111,6 +111,6 @@ test("the new target is unsigned, separate, and has no recorder, clipboard or lo
   assert.doesNotMatch(view, /UIPasteboard|PasteButton|import AVFoundation|flow\.enroll|flow\.prepare/);
   const transport = swift("GuestInAppBrowser.swift");
   assert.match(transport, /websiteDataStore = \.nonPersistent\(\)/);
-  assert.match(transport, /requestMediaCapturePermissionFor[\s\S]+?\.deny/);
+  assert.match(transport, /requestMediaCapturePermissionFor origin: WKSecurityOrigin,\s*initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,\s*decisionHandler: @escaping @MainActor @Sendable \(WKPermissionDecision\) -> Void\s*\) \{\s*decisionHandler\(\.deny\)/);
   assert.doesNotMatch(transport, /HTTPCookie|httpCookieStore|URLSession|x-vercel-protection-bypass|UserDefaults/);
 });

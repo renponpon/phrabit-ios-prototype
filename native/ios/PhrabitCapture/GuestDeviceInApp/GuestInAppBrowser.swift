@@ -94,9 +94,10 @@ final class GuestInAppBrowser: NSObject, ObservableObject, WKNavigationDelegate,
 
     func webView(
         _ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
-        initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType
-    ) async -> WKPermissionDecision {
-        .deny
+        initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+        decisionHandler: @escaping @MainActor @Sendable (WKPermissionDecision) -> Void
+    ) {
+        decisionHandler(.deny)
     }
 
     private func handleNavigationFailure() {
