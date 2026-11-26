@@ -312,6 +312,13 @@ export function assertGuestDeviceProbeBundle(info, executable, entitlements, tea
   assertDeviceProofBundle(standaloneBuilds.get(deviceVariant), info, executable, entitlements, team, buildNumber);
 }
 
+export function assertDistributionProfileAppAttestProduction(allowedEnvironments) {
+  const productionAllowed = allowedEnvironments === 'production' ||
+    (Array.isArray(allowedEnvironments) && allowedEnvironments.includes('production') &&
+      allowedEnvironments.every(environment => environment === 'development' || environment === 'production'));
+  assert.ok(productionAllowed, 'Existing app profile must allow App Attest production');
+}
+
 export function assertGuestDeviceInAppBundle(info, executable, entitlements, team, buildNumber) {
   assertDeviceProofBundle(standaloneBuilds.get(deviceInAppVariant), info, executable, entitlements, team, buildNumber);
   const appIdentity = team + '.com.phrabit.app';
@@ -477,7 +484,7 @@ function main(stage) {
       assert.equal(profile.Entitlements['application-identifier'], `${profile.TeamIdentifier[0]}.${bundleId}`);
       assert.equal(profile.Entitlements['get-task-allow'], false);
       if (offlineVariant === deviceInAppVariant) {
-        assert.equal(profile.Entitlements[attestEntitlement], 'production', 'Existing app profile must allow App Attest production');
+        assertDistributionProfileAppAttestProduction(profile.Entitlements[attestEntitlement]);
       }
       assert.equal(profile.ProvisionedDevices, undefined);
       assert.equal(profile.ProvisionsAllDevices, undefined);

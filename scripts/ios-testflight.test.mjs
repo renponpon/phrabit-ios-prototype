@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { approvedPreviewProjectDigest, assertGuestConnectionBundle, assertGuestDeviceInAppBundle, assertGuestDeviceProbeBundle, assertTestFlightUploadAllowed, audioPilotMode, classifyCommandFailure, dependencyRevisions, distributionSpec, guestConnectionDistributionSpec, guestDeviceInAppDistributionSpec, guestDeviceInAppUnsignedReleaseSpec, guestDeviceProbeDistributionSpec, guestUnsignedSpec, inspectEncryptionEvidence, offlineInternalVariant, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
+import { approvedPreviewProjectDigest, assertDistributionProfileAppAttestProduction, assertGuestConnectionBundle, assertGuestDeviceInAppBundle, assertGuestDeviceProbeBundle, assertTestFlightUploadAllowed, audioPilotMode, classifyCommandFailure, dependencyRevisions, distributionSpec, guestConnectionDistributionSpec, guestDeviceInAppDistributionSpec, guestDeviceInAppUnsignedReleaseSpec, guestDeviceProbeDistributionSpec, guestUnsignedSpec, inspectEncryptionEvidence, offlineInternalVariant, previewAuthPrivacyCategories, previewAuthSettings, targetSettingsArguments, validateExecution } from './ios-testflight.mjs';
 
 const approved = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'renponpon/phrabit-ios-prototype', GITHUB_REF: 'refs/heads/main', EXPECTED_COMMIT: 'a'.repeat(40), GITHUB_SHA: 'a'.repeat(40), RUNNER_TEMP: '/tmp/runner' };
 const appUuid = '11111111-1111-1111-1111-111111111111';
@@ -442,6 +442,15 @@ test('in-app proof upload requires its own inspection and does not accept the or
   assert.throws(() => assertTestFlightUploadAllowed(inspected, 'none'), /separate internal upload stage/);
 });
 
+test('distribution profile recognizes Apple’s production allow-list without accepting development-only profiles', () => {
+  for (const approved of ['production', ['production'], ['development', 'production']]) {
+    assert.doesNotThrow(() => assertDistributionProfileAppAttestProduction(approved));
+  }
+  for (const rejected of [undefined, 'development', [], ['development'], '*', ['production', '*'], { production: true }]) {
+    assert.throws(() => assertDistributionProfileAppAttestProduction(rejected), /profile must allow App Attest production/);
+  }
+});
+
 test('in-app device inspection rejects a new identity, shared Keychain, recorder and export answers', () => {
   const identity = 'TESTTEAM01.com.phrabit.app';
   const entitlements = { 'com.apple.developer.devicecheck.appattest-environment': 'production',
@@ -462,6 +471,7 @@ test('in-app device inspection rejects a new identity, shared Keychain, recorder
     { 'com.apple.security.application-groups': ['group.com.phrabit'] },
     { 'get-task-allow': true },
     { 'com.apple.developer.devicecheck.appattest-environment': 'development' },
+    { 'com.apple.developer.devicecheck.appattest-environment': ['production'] },
   ]) assert.throws(() => inspect(info, binary, { ...entitlements, ...override }));
   for (const key of ['NSMicrophoneUsageDescription', 'ITSAppUsesNonExemptEncryption', 'PhrabitGuestDeviceProofOnly', 'NSAppTransportSecurity']) {
     assert.throws(() => inspect({ ...info, [key]: false }), /Unexpected connection bundle key/);
